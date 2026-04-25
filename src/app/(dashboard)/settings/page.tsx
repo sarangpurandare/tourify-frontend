@@ -14,7 +14,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
-  Upload, X, Copy, Check, AlertTriangle, Key, Users, CreditCard,
+  Upload, X, Copy, Check, AlertTriangle, Key, Users,
 } from 'lucide-react';
 
 /* ─── Types ────────────────────────────────────── */
@@ -27,7 +27,6 @@ interface OrgSettings {
   timezone: string;
   default_currency: string;
   plan: string;
-  payment_failed_at: string | null;
 }
 
 interface OrgUsage {
@@ -49,8 +48,6 @@ interface BillingStatus {
     storage_bytes: number;
     api_access: boolean;
   };
-  plan_period_end: string | null;
-  payment_failed_at: string | null;
 }
 
 interface Invitation {
@@ -94,13 +91,6 @@ const PLAN_LABELS: Record<string, string> = {
   starter: 'Starter',
   pro: 'Pro',
   business: 'Business',
-};
-
-const PLAN_PRICES: Record<string, string> = {
-  free: '$0/mo',
-  starter: '$29/mo',
-  pro: '$79/mo',
-  business: '$199/mo',
 };
 
 const TABS = ['General', 'Team', 'Billing', 'API Keys'] as const;
@@ -318,24 +308,6 @@ export default function SettingsPage() {
       setGeneralError(err instanceof Error ? err.message : 'Failed to save');
     } finally {
       setGeneralSaving(false);
-    }
-  }
-
-  async function handleCheckout(plan: string) {
-    try {
-      const res = await api.post<{ data: { url: string } }>('/billing/checkout', { plan });
-      window.location.href = res.data.url;
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Failed to start checkout');
-    }
-  }
-
-  async function handleBillingPortal() {
-    try {
-      const res = await api.post<{ data: { url: string } }>('/billing/portal');
-      window.location.href = res.data.url;
-    } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'Failed to open billing portal');
     }
   }
 
@@ -669,63 +641,17 @@ export default function SettingsPage() {
         {/* ═══ BILLING TAB ═══ */}
         {activeTab === 'Billing' && (
           <div>
-            {billing?.payment_failed_at && (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  padding: '12px 16px',
-                  fontSize: 13,
-                  color: 'var(--crm-red)',
-                  background: 'var(--crm-red-bg)',
-                  borderRadius: 'var(--crm-radius-sm)',
-                  marginBottom: 20,
-                }}
-              >
-                <AlertTriangle size={16} />
-                Your last payment failed. Please update your billing information to avoid service interruption.
-              </div>
-            )}
-
             {/* Current plan card */}
             <div className="crm-card" style={{ padding: 24, marginBottom: 24 }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <div>
-                  <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--crm-text-3)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>
-                    Current plan
-                  </div>
-                  <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--crm-text)' }}>
-                    {PLAN_LABELS[billing?.plan || settings?.plan || 'free'] || 'Free'}
-                  </div>
-                  <div style={{ fontSize: 14, color: 'var(--crm-text-2)', marginTop: 2 }}>
-                    {PLAN_PRICES[billing?.plan || settings?.plan || 'free'] || '$0/mo'}
-                    {billing?.plan_period_end && (
-                      <span style={{ color: 'var(--crm-text-3)', marginLeft: 8 }}>
-                        &middot; renews {formatDate(billing.plan_period_end)}
-                      </span>
-                    )}
-                  </div>
+              <div style={{ marginBottom: 16 }}>
+                <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--crm-text-3)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>
+                  Current plan
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {(billing?.plan || settings?.plan || 'free') !== 'business' && (
-                    <button
-                      onClick={() => handleCheckout((billing?.plan || settings?.plan) === 'free' ? 'starter' : (billing?.plan || settings?.plan) === 'starter' ? 'pro' : 'business')}
-                      className="crm-btn primary"
-                      style={{ height: 36 }}
-                    >
-                      <CreditCard size={14} /> Upgrade plan
-                    </button>
-                  )}
-                  {(billing?.plan || settings?.plan || 'free') !== 'free' && (
-                    <button
-                      onClick={handleBillingPortal}
-                      className="crm-btn"
-                      style={{ height: 36 }}
-                    >
-                      Manage billing
-                    </button>
-                  )}
+                <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--crm-text)' }}>
+                  {PLAN_LABELS[billing?.plan || settings?.plan || 'free'] || 'Free'}
+                </div>
+                <div style={{ fontSize: 13, color: 'var(--crm-text-3)', marginTop: 4 }}>
+                  Plan changes are managed manually. Contact support to upgrade.
                 </div>
               </div>
             </div>
