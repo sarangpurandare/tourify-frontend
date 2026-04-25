@@ -1,17 +1,39 @@
 import Link from "next/link";
+import type { SiteConfig } from "@/types/website-template";
 
-export function CTA() {
+type CTAProps = SiteConfig["cta"];
+
+export function CTA({
+  eyebrow,
+  titleHtml,
+  subtitle,
+  primaryCta,
+  secondaryCta,
+  finePrint,
+}: CTAProps) {
   return (
     <section className="cta">
       <div className="container cta-inner">
-        <div className="eyebrow">Start your journey</div>
-        <h2 className="cta-title">Where <em>should you</em><br/>go next?</h2>
-        <p className="cta-sub">A conversation with us, free, no pressure. We&apos;ll talk about what you&apos;re looking for, what kind of experiences excite you — and which trip might be the right next one.</p>
+        <div className="eyebrow">{eyebrow}</div>
+        <h2
+          className="cta-title"
+          dangerouslySetInnerHTML={{ __html: titleHtml }}
+        />
+        <p className="cta-sub">{subtitle}</p>
         <div className="cta-actions">
-          <Link className="btn btn-primary" href="/contact">Get in touch →</Link>
-          <a className="btn btn-ghost" href="https://wa.me/919600587100" target="_blank" rel="noopener noreferrer">WhatsApp us</a>
+          <Link className="btn btn-primary" href={primaryCta.href}>
+            {primaryCta.label}
+          </Link>
+          <a
+            className="btn btn-ghost"
+            href={secondaryCta.href}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            {secondaryCta.label}
+          </a>
         </div>
-        <div className="cta-fine">No spam. Reply within 24 hrs.</div>
+        <div className="cta-fine">{finePrint}</div>
       </div>
     </section>
   );

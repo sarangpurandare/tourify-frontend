@@ -1,55 +1,89 @@
 import Link from "next/link";
-import { TOURS, IMG } from "@/lib/website-data";
+import type { SiteConfig } from "@/types/website-template";
 import { Polaroid } from "./image-components";
 
-export function Spotlight() {
-  const t = TOURS[0]; // Scotland & Ireland - featured tour from live site
+type SpotlightProps = SiteConfig["spotlight"];
+
+export function Spotlight({
+  eyebrow,
+  titleHtml,
+  description,
+  images,
+  postmark,
+  infoCells,
+  includes,
+  primaryCta,
+  secondaryCta,
+}: SpotlightProps) {
   return (
     <section className="spotlight reveal">
       <div className="container">
         <div className="spotlight-grid">
           <div className="spotlight-img-wrap">
-            <Polaroid className="main" src={IMG.scotland} label="scottish highlands" caption="edinburgh" coord="57.2°N" />
-            <Polaroid className="small" src={IMG.scotland2} label="isle of skye" caption="hebrides" coord="" />
+            {images[0] && (
+              <Polaroid
+                className="main"
+                src={images[0].src}
+                label={images[0].label}
+                caption={images[0].caption}
+                coord={images[0].coord}
+              />
+            )}
+            {images[1] && (
+              <Polaroid
+                className="small"
+                src={images[1].src}
+                label={images[1].label}
+                caption={images[1].caption}
+                coord={images[1].coord}
+              />
+            )}
             <div className="postmark" style={{ top: 30, right: 30 }}>
               <div>
-                Featured
-                <div className="postmark-line">Scotland</div>
-                Booking open
+                {postmark.line1}
+                <div className="postmark-line">{postmark.line2}</div>
+                {postmark.line3}
               </div>
             </div>
           </div>
           <div className="spotlight-content">
-            <div className="eyebrow">Featured Trip</div>
-            <h2 className="section-title">Scotland<br/><em>& Ireland.</em></h2>
-            <p className="spotlight-desc">
-              Sixteen days through the Scottish Highlands, Irish countryside, and centuries of Celtic heritage. Small group of just 10 travellers, immersive local experiences, and landscapes that take your breath away.
-            </p>
+            <div className="eyebrow">{eyebrow}</div>
+            <h2
+              className="section-title"
+              dangerouslySetInnerHTML={{ __html: titleHtml }}
+            />
+            <p className="spotlight-desc">{description}</p>
             <div className="spotlight-info">
-              <div className="spotlight-info-cell">
-                <div className="l">Duration</div>
-                <div className="v">16 Days<br/>15 Nights</div>
-              </div>
-              <div className="spotlight-info-cell">
-                <div className="l">Group</div>
-                <div className="v">Max 10<br/>travellers</div>
-              </div>
-              <div className="spotlight-info-cell">
-                <div className="l">Season</div>
-                <div className="v">2026<br/><span className="mono">departures</span></div>
-              </div>
+              {infoCells.map((c, i) => (
+                <div className="spotlight-info-cell" key={i}>
+                  <div className="l">{c.label}</div>
+                  <div className="v">
+                    {c.value}
+                    <br />
+                    <span className="mono">{c.valueSub}</span>
+                  </div>
+                </div>
+              ))}
             </div>
             <ul className="spotlight-includes">
-              <li><span className="check">✓</span> All accommodation in handpicked heritage stays</li>
-              <li><span className="check">✓</span> Expert local guides throughout</li>
-              <li><span className="check">✓</span> All meals and local experiences</li>
-              <li><span className="check">✓</span> Visa support and travel insurance guidance</li>
-              <li><span className="check">✓</span> Airport transfers and local transport</li>
-              <li><span className="check">✓</span> Small group, maximum 10 travellers</li>
+              {includes.map((item, i) => (
+                <li key={i}>
+                  <span className="check">✓</span> {item}
+                </li>
+              ))}
             </ul>
             <div className="hero-actions">
-              <Link className="btn btn-terra" href="/contact">Enquire about this trip →</Link>
-              <a className="btn btn-ghost" href="https://wa.me/919600587100" target="_blank" rel="noopener noreferrer">WhatsApp Us</a>
+              <Link className="btn btn-terra" href={primaryCta.href}>
+                {primaryCta.label}
+              </Link>
+              <a
+                className="btn btn-ghost"
+                href={secondaryCta.href}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                {secondaryCta.label}
+              </a>
             </div>
           </div>
         </div>

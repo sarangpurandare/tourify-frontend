@@ -2,29 +2,42 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import type { SiteConfig } from "@/types/website-template";
 
-export function Nav() {
+interface NavProps {
+  brand: SiteConfig["brand"];
+  links: SiteConfig["nav"]["links"];
+  cta: SiteConfig["nav"]["cta"];
+}
+
+export function Nav({ brand, links, cta }: NavProps) {
   const pathname = usePathname();
-  const isActive = (path: string) => pathname === path;
 
   return (
     <nav className="nav">
       <Link className="nav-brand" href="/">
-        <div className="nav-brand-mark">b</div>
+        <div className="nav-brand-mark">{brand.logoInitial}</div>
         <div>
-          <div className="nav-brand-name">Boarding Pass</div>
-          <div className="nav-brand-sub">Small-group travel · Mumbai</div>
+          <div className="nav-brand-name">{brand.name}</div>
+          <div className="nav-brand-sub">{brand.subtitle}</div>
         </div>
       </Link>
       <div className="nav-links">
-        <Link className={`nav-link ${isActive("/") ? "active" : ""}`} href="/">Home</Link>
-        <Link className={`nav-link ${isActive("/tours") ? "active" : ""}`} href="/tours">Trips</Link>
-        <Link className={`nav-link ${isActive("/about") ? "active" : ""}`} href="/about">About</Link>
-        <Link className={`nav-link ${isActive("/contact") ? "active" : ""}`} href="/contact">Contact</Link>
+        {links.map((l) => (
+          <Link
+            key={l.href}
+            className={`nav-link ${pathname === l.href ? "active" : ""}`}
+            href={l.href}
+          >
+            {l.label}
+          </Link>
+        ))}
       </div>
       <div className="nav-cta">
-        <span className="nav-phone">+91 96005 87100</span>
-        <Link className="btn btn-primary" href="/contact">Plan a trip</Link>
+        <span className="nav-phone">{brand.phone}</span>
+        <Link className="btn btn-primary" href={cta.href}>
+          {cta.label}
+        </Link>
       </div>
     </nav>
   );

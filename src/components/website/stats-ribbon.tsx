@@ -1,11 +1,15 @@
-import { STATS } from "@/lib/website-data";
+import type { SiteConfig } from "@/types/website-template";
 
-export function StatsRibbon() {
+interface StatsRibbonProps {
+  stats: SiteConfig["stats"];
+}
+
+export function StatsRibbon({ stats }: StatsRibbonProps) {
   return (
     <section className="stats-ribbon">
       <div className="container">
         <div className="stats-ribbon-grid">
-          {STATS.map((s, i) => (
+          {stats.map((s, i) => (
             <div key={i}>
               <div className="num">{s.num}</div>
               <div className="label">{s.label}</div>
