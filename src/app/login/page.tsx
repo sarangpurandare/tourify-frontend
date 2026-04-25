@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Building2, ArrowRight } from 'lucide-react';
+import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
 
 const DEV_BYPASS = process.env.NEXT_PUBLIC_DEV_AUTH_BYPASS === 'true';
@@ -239,6 +240,13 @@ function ProdOrgEntry() {
             {loading ? 'Checking...' : 'Continue'}
           </button>
         </form>
+
+        <div style={{ textAlign: 'center', marginTop: 24, fontSize: 13, color: 'var(--crm-text-3)' }}>
+          Don&apos;t have an account?{' '}
+          <Link href="/signup" style={{ color: 'var(--crm-accent)', textDecoration: 'none', fontWeight: 500 }}>
+            Create an account
+          </Link>
+        </div>
       </div>
     </div>
   );

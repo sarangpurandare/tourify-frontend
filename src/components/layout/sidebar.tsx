@@ -16,6 +16,8 @@ import {
   LogOut,
   Target,
   CalendarCheck,
+  Globe,
+  Settings,
 } from 'lucide-react';
 
 type NavItem = { href: string; label: string; icon: typeof LayoutDashboard; roles: string[] };
@@ -56,10 +58,17 @@ const navSections: NavSection[] = [
     ],
   },
   {
+    section: 'Website',
+    items: [
+      { href: '/website', label: 'Website', icon: Globe, roles: ['owner', 'admin'] },
+    ],
+  },
+  {
     section: 'Admin',
     items: [
       { href: '/staff', label: 'Staff', icon: UserCog, roles: ['owner', 'admin'] },
       { href: '/audit', label: 'Audit Log', icon: ScrollText, roles: ['owner', 'admin'] },
+      { href: '/settings', label: 'Settings', icon: Settings, roles: ['owner', 'admin'] },
     ],
   },
 ];

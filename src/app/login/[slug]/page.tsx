@@ -265,6 +265,13 @@ function ProdLoginForm({ org }: { org: OrgInfo }) {
           {loading ? 'Signing in...' : 'Sign in'}
         </button>
       </form>
+
+      <div style={{ textAlign: 'center', marginTop: 24, fontSize: 13, color: 'var(--crm-text-3)' }}>
+        Don&apos;t have an account?{' '}
+        <Link href="/signup" style={{ color: 'var(--crm-accent)', textDecoration: 'none', fontWeight: 500 }}>
+          Create an account
+        </Link>
+      </div>
     </>
   );
 }
