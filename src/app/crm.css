@@ -1,0 +1,504 @@
+/* Boarding Pass CRM — Apple-inspired design system */
+
+:root {
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Inter", system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+
+  --crm-bg: #ffffff;
+  --crm-bg-elev: #ffffff;
+  --crm-bg-subtle: #f5f5f7;
+  --crm-bg-hover: rgba(0,0,0,0.035);
+  --crm-bg-active: rgba(0,0,0,0.06);
+  --crm-bg-sidebar: #fbfbfd;
+  --crm-bg-canvas: #f5f5f7;
+
+  --crm-text: #1d1d1f;
+  --crm-text-2: #424245;
+  --crm-text-3: #6e6e73;
+  --crm-text-4: #86868b;
+  --crm-text-disabled: #aeaeb2;
+
+  --crm-line: rgba(0,0,0,0.08);
+  --crm-line-strong: rgba(0,0,0,0.14);
+  --crm-hairline: rgba(0,0,0,0.06);
+
+  --crm-accent: #0071e3;
+  --crm-accent-hover: #0077ed;
+  --crm-accent-bg: rgba(0,113,227,0.08);
+  --crm-accent-text: #0071e3;
+
+  --crm-green: #248a3d;
+  --crm-green-bg: rgba(36,138,61,0.1);
+  --crm-amber: #b25000;
+  --crm-amber-bg: rgba(178,80,0,0.1);
+  --crm-red: #d70015;
+  --crm-red-bg: rgba(215,0,21,0.08);
+  --crm-purple: #5856d6;
+  --crm-purple-bg: rgba(88,86,214,0.1);
+  --crm-pink: #d93775;
+  --crm-pink-bg: rgba(217,55,117,0.1);
+  --crm-teal: #007d8a;
+  --crm-teal-bg: rgba(0,125,138,0.1);
+
+  --crm-shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+  --crm-shadow-md: 0 4px 16px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --crm-shadow-lg: 0 12px 40px rgba(0,0,0,0.12);
+
+  --crm-radius-sm: 6px;
+  --crm-radius: 10px;
+  --crm-radius-lg: 14px;
+  --crm-radius-xl: 18px;
+
+  --crm-row-h: 44px;
+  --crm-pad-card: 20px;
+  --crm-gap: 16px;
+}
+
+.dark {
+  --crm-bg: #000000;
+  --crm-bg-elev: #1c1c1e;
+  --crm-bg-subtle: #1c1c1e;
+  --crm-bg-hover: rgba(255,255,255,0.05);
+  --crm-bg-active: rgba(255,255,255,0.08);
+  --crm-bg-sidebar: #0b0b0d;
+  --crm-bg-canvas: #000000;
+
+  --crm-text: #f5f5f7;
+  --crm-text-2: #d1d1d6;
+  --crm-text-3: #98989d;
+  --crm-text-4: #6e6e73;
+  --crm-text-disabled: #48484a;
+
+  --crm-line: rgba(255,255,255,0.1);
+  --crm-line-strong: rgba(255,255,255,0.18);
+  --crm-hairline: rgba(255,255,255,0.06);
+
+  --crm-accent: #0a84ff;
+  --crm-accent-hover: #1a8fff;
+  --crm-accent-bg: rgba(10,132,255,0.16);
+  --crm-accent-text: #409cff;
+
+  --crm-green: #32d74b;
+  --crm-green-bg: rgba(50,215,75,0.14);
+  --crm-amber: #ff9f0a;
+  --crm-amber-bg: rgba(255,159,10,0.14);
+  --crm-red: #ff453a;
+  --crm-red-bg: rgba(255,69,58,0.14);
+  --crm-purple: #bf5af2;
+  --crm-purple-bg: rgba(191,90,242,0.14);
+  --crm-pink: #ff6482;
+  --crm-pink-bg: rgba(255,100,130,0.14);
+  --crm-teal: #64d2ff;
+  --crm-teal-bg: rgba(100,210,255,0.14);
+
+  --crm-shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --crm-shadow-md: 0 4px 16px rgba(0,0,0,0.3);
+  --crm-shadow-lg: 0 12px 40px rgba(0,0,0,0.5);
+}
+
+/* ─── App shell ────────────────────────────────────────── */
+.crm-app {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  height: 100vh;
+  overflow: hidden;
+  background: var(--crm-bg-canvas);
+  color: var(--crm-text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.45;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.003em;
+}
+
+/* ─── Sidebar ──────────────────────────────────────────── */
+.crm-sidebar {
+  background: var(--crm-bg-sidebar);
+  border-right: 1px solid var(--crm-hairline);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.crm-sidebar-hd {
+  padding: 18px 20px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.crm-sidebar-logo {
+  width: 28px; height: 28px;
+  border-radius: 7px;
+  background: linear-gradient(135deg, var(--crm-accent) 0%, color-mix(in oklab, var(--crm-accent) 70%, #000) 100%);
+  display: grid; place-items: center;
+  color: #fff;
+  font-weight: 600;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  flex-shrink: 0;
+}
+
+.crm-sidebar-brand {
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+}
+
+.crm-sidebar-brand small {
+  display: block;
+  font-weight: 400;
+  color: var(--crm-text-4);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  margin-top: 1px;
+}
+
+.crm-sidebar-search {
+  margin: 0 12px 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px;
+  height: 30px;
+  background: var(--crm-bg-active);
+  border-radius: var(--crm-radius-sm);
+  color: var(--crm-text-3);
+  font-size: 13px;
+}
+
+.crm-sidebar-search kbd {
+  margin-left: auto;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  color: var(--crm-text-4);
+  background: transparent;
+  border: 1px solid var(--crm-line);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+
+.crm-sidebar-nav {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 8px 16px;
+}
+
+.crm-nav-section-label {
+  padding: 14px 12px 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--crm-text-4);
+}
+
+.crm-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: var(--crm-radius-sm);
+  font-size: 13.5px;
+  color: var(--crm-text-2);
+  cursor: default;
+  user-select: none;
+  text-decoration: none;
+  transition: background 0.1s;
+}
+
+.crm-nav-item:hover { background: var(--crm-bg-hover); color: var(--crm-text); }
+.crm-nav-item.active {
+  background: var(--crm-bg-active);
+  color: var(--crm-text);
+  font-weight: 500;
+}
+.crm-nav-item svg { flex-shrink: 0; color: var(--crm-text-3); }
+.crm-nav-item.active svg { color: var(--crm-accent); }
+.crm-nav-item .crm-count {
+  margin-left: auto;
+  font-size: 11.5px;
+  color: var(--crm-text-4);
+  font-variant-numeric: tabular-nums;
+}
+
+.crm-sidebar-ft {
+  padding: 10px 14px;
+  border-top: 1px solid var(--crm-hairline);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* ─── Avatar ─────────────────────────────────── */
+.crm-avatar {
+  width: 26px; height: 26px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #ff9f0a, #d93775);
+  display: grid; place-items: center;
+  color: #fff; font-weight: 600; font-size: 11px;
+  flex-shrink: 0;
+}
+.crm-avatar.sm { width: 22px; height: 22px; font-size: 10px; }
+.crm-avatar.lg { width: 40px; height: 40px; font-size: 15px; }
+
+/* ─── Main ─────────────────────────────────────────────── */
+.crm-main {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--crm-bg-canvas);
+}
+
+.crm-topbar {
+  height: 52px;
+  padding: 0 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--crm-hairline);
+  background: color-mix(in oklab, var(--crm-bg) 80%, transparent);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  flex-shrink: 0;
+  z-index: 2;
+}
+
+.crm-topbar-crumb {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--crm-text-3);
+}
+.crm-topbar-crumb .sep { color: var(--crm-text-4); }
+.crm-topbar-crumb strong { color: var(--crm-text); font-weight: 500; }
+
+.crm-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ─── Cards ───────────────────────────────────── */
+.crm-card {
+  background: var(--crm-bg-elev);
+  border: 1px solid var(--crm-hairline);
+  border-radius: var(--crm-radius-lg);
+  box-shadow: var(--crm-shadow-sm);
+}
+.crm-card-pad { padding: var(--crm-pad-card); }
+.crm-card-hd {
+  padding: 14px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--crm-hairline);
+}
+.crm-card-hd h3 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: -0.005em; }
+
+/* ─── Pills / Badges ───────────────────────────────────── */
+.crm-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 500;
+  background: var(--crm-bg-active);
+  color: var(--crm-text-2);
+  letter-spacing: 0;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+.crm-pill.green { background: var(--crm-green-bg); color: var(--crm-green); }
+.crm-pill.amber { background: var(--crm-amber-bg); color: var(--crm-amber); }
+.crm-pill.red { background: var(--crm-red-bg); color: var(--crm-red); }
+.crm-pill.blue { background: var(--crm-accent-bg); color: var(--crm-accent-text); }
+.crm-pill.purple { background: var(--crm-purple-bg); color: var(--crm-purple); }
+.crm-pill.pink { background: var(--crm-pink-bg); color: var(--crm-pink); }
+.crm-pill.teal { background: var(--crm-teal-bg); color: var(--crm-teal); }
+
+.crm-pill .dot {
+  width: 6px; height: 6px; border-radius: 50%; background: currentColor;
+  opacity: 0.9;
+}
+
+/* ─── Progress bars ───────────────────────────────────── */
+.crm-progress {
+  height: 4px;
+  background: var(--crm-bg-active);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.crm-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--crm-accent);
+  border-radius: 999px;
+  transition: width 0.3s ease;
+}
+.crm-progress.green > span { background: var(--crm-green); }
+.crm-progress.amber > span { background: var(--crm-amber); }
+.crm-progress.red > span { background: var(--crm-red); }
+
+/* ─── Buttons ──────────────────────────────────────────── */
+.crm-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  border-radius: var(--crm-radius-sm);
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid var(--crm-line);
+  background: var(--crm-bg-elev);
+  color: var(--crm-text);
+  cursor: default;
+  user-select: none;
+  letter-spacing: -0.003em;
+}
+.crm-btn:hover { background: var(--crm-bg-hover); }
+.crm-btn.primary {
+  background: var(--crm-accent);
+  color: #fff;
+  border-color: transparent;
+}
+.crm-btn.primary:hover { background: var(--crm-accent-hover); }
+.crm-btn.ghost { border-color: transparent; background: transparent; }
+.crm-btn.ghost:hover { background: var(--crm-bg-hover); }
+.crm-btn.sm { height: 26px; padding: 0 9px; font-size: 12.5px; }
+
+/* ─── Rows ────────────────────────────────────── */
+.crm-row {
+  display: grid;
+  align-items: center;
+  min-height: var(--crm-row-h);
+  padding: 0 16px;
+  gap: 12px;
+  border-top: 1px solid var(--crm-hairline);
+  font-size: 13.5px;
+}
+.crm-row:hover { background: var(--crm-bg-hover); }
+.crm-row.hd {
+  border-top: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--crm-text-4);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  min-height: 34px;
+  background: transparent;
+}
+.crm-row.hd:hover { background: transparent; }
+
+/* ─── Typography ──────────────────────────────── */
+.crm-display { font-size: 32px; font-weight: 600; letter-spacing: -0.022em; line-height: 1.1; }
+.crm-title-1 { font-size: 24px; font-weight: 600; letter-spacing: -0.018em; }
+.crm-title-2 { font-size: 18px; font-weight: 600; letter-spacing: -0.012em; }
+.crm-title-3 { font-size: 15px; font-weight: 600; letter-spacing: -0.008em; }
+.crm-caption { font-size: 12px; color: var(--crm-text-3); letter-spacing: 0; }
+.crm-eyebrow {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--crm-text-4);
+}
+.crm-dim { color: var(--crm-text-3); }
+.crm-dim2 { color: var(--crm-text-4); }
+.crm-mono { font-family: var(--font-mono); font-size: 12.5px; }
+.crm-tabular { font-variant-numeric: tabular-nums; }
+
+/* ─── Tabs ─────────────────────────────────────────────── */
+.crm-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--crm-hairline);
+  padding: 0 24px;
+  background: var(--crm-bg);
+  overflow-x: auto;
+}
+.crm-tab {
+  padding: 12px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--crm-text-3);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  cursor: default;
+  white-space: nowrap;
+  display: flex; align-items: center; gap: 6px;
+  user-select: none;
+}
+.crm-tab:hover { color: var(--crm-text); }
+.crm-tab.active { color: var(--crm-text); border-bottom-color: var(--crm-text); }
+.crm-tab .crm-count {
+  font-size: 11px;
+  color: var(--crm-text-4);
+  background: var(--crm-bg-active);
+  padding: 1px 6px;
+  border-radius: 999px;
+  font-weight: 500;
+}
+
+/* ─── Segmented control ────────────────────────────────── */
+.crm-seg {
+  display: inline-flex;
+  padding: 2px;
+  background: var(--crm-bg-active);
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.crm-seg button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 4px 12px;
+  border-radius: 6px;
+  color: var(--crm-text-2);
+  cursor: default;
+  font: inherit;
+  letter-spacing: -0.003em;
+}
+.crm-seg button.on {
+  background: var(--crm-bg-elev);
+  color: var(--crm-text);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.08), 0 0 0 0.5px var(--crm-line);
+}
+
+/* ─── Misc utils ──────────────────────────────────────── */
+.crm-sep-h { height: 1px; background: var(--crm-hairline); width: 100%; }
+.crm-sep-v { width: 1px; background: var(--crm-hairline); align-self: stretch; }
+
+/* Image placeholder */
+.crm-img-plc {
+  background:
+    repeating-linear-gradient(135deg, color-mix(in oklab, var(--crm-text) 4%, var(--crm-bg)) 0 10px, var(--crm-bg-subtle) 10px 20px);
+  border-radius: var(--crm-radius);
+  display: grid; place-items: center;
+  color: var(--crm-text-4);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+}
+
+/* ─── Utility helpers ─────────────────────────────────── */
+.crm-stack { display: flex; flex-direction: column; }
+.crm-hstack { display: flex; align-items: center; }
+.crm-grid { display: grid; }
+.crm-gap-6 { gap: 6px; }
+.crm-gap-10 { gap: 10px; }
+.crm-gap-14 { gap: 14px; }
+.crm-gap-16 { gap: 16px; }
+.crm-gap-20 { gap: 20px; }
+.crm-gap-24 { gap: 24px; }
+.crm-pad-24 { padding: 24px; }
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

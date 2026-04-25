@@ -1,0 +1,36 @@
+export interface Departure {
+  id: string;
+  trip_master_id: string;
+  start_date: string;
+  end_date: string;
+  capacity: number;
+  pricing_override_cents?: number;
+  pricing_currency: string;
+  early_bird_price_cents?: number;
+  early_bird_deadline?: string;
+  payment_schedule?: Record<string, unknown>[];
+  trip_leader_id?: string;
+  co_leader_id?: string;
+  ops_owner_id?: string;
+  pickup_city?: string;
+  drop_city?: string;
+  whatsapp_link?: string;
+  is_published: boolean;
+  status: string;
+  notes?: string;
+  created_at: string;
+  updated_at: string;
+  actual_start_date?: string;
+  actual_end_date?: string;
+  meeting_point?: string;
+  meeting_time?: string;
+  emergency_contact_name?: string;
+  emergency_contact_phone?: string;
+  briefing_doc_url?: string;
+  live_status: string;
+  current_day?: number;
+  trip_name?: string;
+  confirmed_count: number;
+  waitlist_count: number;
+  spots_remaining: number;
+}
