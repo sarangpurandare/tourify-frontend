@@ -4,7 +4,8 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -12,27 +13,18 @@ export default function ResetPasswordPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [hasSession, setHasSession] = useState<boolean | null>(null);
+  const [recoveryToken, setRecoveryToken] = useState<string | null>(null);
 
   useEffect(() => {
-    // Supabase exchanges the recovery link for a session automatically.
-    // Listen for the PASSWORD_RECOVERY event and also check the existing session.
-    let cancelled = false;
-
-    supabase.auth.getSession().then(({ data }) => {
-      if (cancelled) return;
-      setHasSession(!!data.session);
-    });
-
-    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY' || event === 'SIGNED_IN') {
-        setHasSession(true);
-      }
-    });
-
-    return () => {
-      cancelled = true;
-      sub.subscription.unsubscribe();
-    };
+    const hash = window.location.hash.substring(1);
+    const params = new URLSearchParams(hash);
+    const token = params.get('access_token');
+    if (token) {
+      setRecoveryToken(token);
+      setHasSession(true);
+    } else {
+      setHasSession(false);
+    }
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -47,10 +39,17 @@ export default function ResetPasswordPage() {
     }
     setLoading(true);
     try {
-      const { error } = await supabase.auth.updateUser({ password });
-      if (error) throw error;
+      const res = await fetch(`${API_URL}/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ access_token: recoveryToken, password }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: { message: 'Failed to update password' } }));
+        throw new Error(err.error?.message || 'Failed to update password');
+      }
       toast.success('Password updated. Redirecting...');
-      router.push('/dashboard');
+      router.push('/login');
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'Failed to update password');
     } finally {

@@ -5,7 +5,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
 import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
 
 interface OrgInfo {
   id: string;
@@ -153,17 +154,11 @@ export default function OrgLoginPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    supabase
-      .from('organisations')
-      .select('id, name, slug, logo_url')
-      .eq('slug', slug)
-      .eq('is_active', true)
-      .single()
-      .then(({ data, error }) => {
-        if (error || !data) { setNotFound(true); }
-        else { setOrg(data as OrgInfo); }
-        setLoading(false);
-      });
+    fetch(`${API_URL}/orgs/${slug}`)
+      .then(res => res.ok ? res.json() : Promise.reject())
+      .then(result => setOrg(result.data))
+      .catch(() => setNotFound(true))
+      .finally(() => setLoading(false));
   }, [slug]);
 
   return (

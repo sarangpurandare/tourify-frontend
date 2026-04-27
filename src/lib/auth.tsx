@@ -1,11 +1,9 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
-import { supabase } from './supabase';
-import { api } from './api';
+import { api, getStoredTokens, setStoredTokens, clearStoredTokens } from './api';
 import type { StaffUser } from '@/types/staff';
 import type { APIResponse } from '@/types/api';
-import type { Session } from '@supabase/supabase-js';
 
 interface SignupPayload {
   org_name: string;
@@ -47,7 +45,6 @@ export interface ImpersonationState {
 }
 
 interface AuthContextType {
-  session: Session | null;
   user: StaffUser | null;
   plan: string | null;
   features: PlanFeatures | null;
@@ -74,11 +71,6 @@ function isImpersonationActive(): boolean {
   return sessionStorage.getItem(IMPERSONATION_FLAG_KEY) === 'true';
 }
 
-function getImpersonationToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  return sessionStorage.getItem(IMPERSONATION_TOKEN_KEY);
-}
-
 function setImpersonationSession(token: string) {
   sessionStorage.setItem(IMPERSONATION_TOKEN_KEY, token);
   sessionStorage.setItem(IMPERSONATION_FLAG_KEY, 'true');
@@ -90,7 +82,6 @@ function clearImpersonationSession() {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<StaffUser | null>(null);
   const [plan, setPlan] = useState<string | null>(null);
   const [features, setFeatures] = useState<PlanFeatures | null>(null);
@@ -119,34 +110,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session) {
-        fetchStaffUser();
-      } else {
-        setLoading(false);
-      }
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session) {
-        setLoading(true);
-        fetchStaffUser();
-      } else {
-        setUser(null);
-        setLoading(false);
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    const { access } = getStoredTokens();
+    if (access) {
+      fetchStaffUser();
+    } else {
+      setLoading(false);
+    }
   }, [fetchStaffUser]);
 
   async function login(email: string, password: string) {
     setLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) throw error;
+      const res = await fetch(`${API_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: { message: 'Login failed' } }));
+        throw new Error(err.error?.message || 'Login failed');
+      }
+      const data = await res.json();
+      setStoredTokens(data.access_token, data.refresh_token);
+      await fetchStaffUser();
     } catch (e) {
       setLoading(false);
       throw e;
@@ -164,20 +150,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error(err.error?.message || 'Signup failed');
     }
     const result: SignupResponse = await response.json();
-    // Set the session in supabase client so subsequent api calls have auth
-    await supabase.auth.setSession({
-      access_token: result.data.access_token,
-      refresh_token: result.data.refresh_token,
-    });
+    setStoredTokens(result.data.access_token, result.data.refresh_token);
     setUser(result.data.user);
     setPlan('free');
   }
 
   async function loginWithTokens(accessToken: string, refreshToken: string) {
-    await supabase.auth.setSession({
-      access_token: accessToken,
-      refresh_token: refreshToken,
-    });
+    setStoredTokens(accessToken, refreshToken);
     setLoading(true);
     await fetchStaffUser();
   }
@@ -203,7 +182,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       setImpersonationSession(accessToken);
       setImpersonating({ active: true });
-      setSession(null);
       await fetchStaffUser();
     } catch (e) {
       setLoading(false);
@@ -215,12 +193,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     clearImpersonationSession();
     setImpersonating(null);
     setUser(null);
-    setSession(null);
     setPlan(null);
     setFeatures(null);
-    // Hard navigate to clear in-memory caches. Do NOT call
-    // supabase.auth.signOut() — the admin's Supabase session
-    // in another tab must stay intact.
     window.location.href = '/login';
   }
 
@@ -229,9 +203,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       exitImpersonation();
       return;
     }
-    await supabase.auth.signOut();
+    clearStoredTokens();
     setUser(null);
-    setSession(null);
     setPlan(null);
     setFeatures(null);
     setImpersonating(null);
@@ -240,7 +213,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <AuthContext.Provider
       value={{
-        session,
         user,
         plan,
         features,

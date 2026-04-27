@@ -1,14 +1,13 @@
 'use client';
 
 import { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
-import { supabase } from './supabase';
-import { travellerApi } from './traveller-api';
+import { travellerApi, getTravellerTokens, setTravellerTokens, clearTravellerTokens } from './traveller-api';
 import type { TravellerProfile } from '@/types/portal';
 import type { APIResponse } from '@/types/api';
-import type { Session } from '@supabase/supabase-js';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
 
 interface TravellerAuthContextType {
-  session: Session | null;
   traveller: TravellerProfile | null;
   profiles: TravellerProfile[];
   loading: boolean;
@@ -20,7 +19,6 @@ interface TravellerAuthContextType {
 const TravellerAuthContext = createContext<TravellerAuthContextType | undefined>(undefined);
 
 export function TravellerAuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
   const [traveller, setTraveller] = useState<TravellerProfile | null>(null);
   const [profiles, setProfiles] = useState<TravellerProfile[]>([]);
   const [loading, setLoading] = useState(true);
@@ -40,52 +38,49 @@ export function TravellerAuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      if (session) {
-        fetchTravellerProfile();
-      } else {
-        setLoading(false);
-      }
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session);
-      if (session) {
-        fetchTravellerProfile();
-      } else {
-        setProfiles([]);
-        setTraveller(null);
-        setLoading(false);
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    const { access } = getTravellerTokens();
+    if (access) {
+      fetchTravellerProfile();
+    } else {
+      setLoading(false);
+    }
   }, [fetchTravellerProfile]);
 
   async function login(email: string, password: string) {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: { message: 'Login failed' } }));
+        throw new Error(err.error?.message || 'Login failed');
+      }
+      const data = await res.json();
+      setTravellerTokens(data.access_token, data.refresh_token);
+      await fetchTravellerProfile();
+    } catch (e) {
+      setLoading(false);
+      throw e;
+    }
   }
 
   async function loginWithTokens(accessToken: string, refreshToken: string) {
-    await supabase.auth.setSession({
-      access_token: accessToken,
-      refresh_token: refreshToken,
-    });
+    setTravellerTokens(accessToken, refreshToken);
     setLoading(true);
     await fetchTravellerProfile();
   }
 
   async function logout() {
-    await supabase.auth.signOut();
+    clearTravellerTokens();
     setProfiles([]);
     setTraveller(null);
-    setSession(null);
   }
 
   return (
-    <TravellerAuthContext.Provider value={{ session, traveller, profiles, loading, login, loginWithTokens, logout }}>
+    <TravellerAuthContext.Provider value={{ traveller, profiles, loading, login, loginWithTokens, logout }}>
       {children}
     </TravellerAuthContext.Provider>
   );

@@ -1,14 +1,15 @@
-import { supabase } from './supabase';
-
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
 
-async function getAuthHeaders(): Promise<HeadersInit> {
+const T_ACCESS_KEY = 'tourify_t_access_token';
+const T_REFRESH_KEY = 'tourify_t_refresh_token';
+
+function getAuthHeaders(): HeadersInit {
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
   };
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.access_token) {
-    headers['Authorization'] = `Bearer ${session.access_token}`;
+  if (typeof window !== 'undefined') {
+    const token = localStorage.getItem(T_ACCESS_KEY);
+    if (token) headers['Authorization'] = `Bearer ${token}`;
   }
   return headers;
 }
@@ -23,15 +24,33 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return response.json();
 }
 
+export function getTravellerTokens() {
+  if (typeof window === 'undefined') return { access: null, refresh: null };
+  return {
+    access: localStorage.getItem(T_ACCESS_KEY),
+    refresh: localStorage.getItem(T_REFRESH_KEY),
+  };
+}
+
+export function setTravellerTokens(access: string, refresh: string) {
+  localStorage.setItem(T_ACCESS_KEY, access);
+  localStorage.setItem(T_REFRESH_KEY, refresh);
+}
+
+export function clearTravellerTokens() {
+  localStorage.removeItem(T_ACCESS_KEY);
+  localStorage.removeItem(T_REFRESH_KEY);
+}
+
 export const travellerApi = {
   async get<T>(path: string): Promise<T> {
-    const headers = await getAuthHeaders();
+    const headers = getAuthHeaders();
     const response = await fetch(`${API_URL}${path}`, { headers });
     return handleResponse<T>(response);
   },
 
   async post<T>(path: string, body?: unknown): Promise<T> {
-    const headers = await getAuthHeaders();
+    const headers = getAuthHeaders();
     const response = await fetch(`${API_URL}${path}`, {
       method: 'POST',
       headers,
@@ -41,7 +60,7 @@ export const travellerApi = {
   },
 
   async put<T>(path: string, body?: unknown): Promise<T> {
-    const headers = await getAuthHeaders();
+    const headers = getAuthHeaders();
     const response = await fetch(`${API_URL}${path}`, {
       method: 'PUT',
       headers,
@@ -51,7 +70,7 @@ export const travellerApi = {
   },
 
   async patch<T>(path: string, body?: unknown): Promise<T> {
-    const headers = await getAuthHeaders();
+    const headers = getAuthHeaders();
     const response = await fetch(`${API_URL}${path}`, {
       method: 'PATCH',
       headers,
@@ -61,7 +80,7 @@ export const travellerApi = {
   },
 
   async delete<T>(path: string): Promise<T> {
-    const headers = await getAuthHeaders();
+    const headers = getAuthHeaders();
     const response = await fetch(`${API_URL}${path}`, {
       method: 'DELETE',
       headers,
@@ -71,9 +90,9 @@ export const travellerApi = {
 
   async upload<T>(path: string, formData: FormData): Promise<T> {
     const headers: HeadersInit = {};
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.access_token) {
-      headers['Authorization'] = `Bearer ${session.access_token}`;
+    if (typeof window !== 'undefined') {
+      const token = localStorage.getItem(T_ACCESS_KEY);
+      if (token) headers['Authorization'] = `Bearer ${token}`;
     }
     const response = await fetch(`${API_URL}${path}`, {
       method: 'POST',

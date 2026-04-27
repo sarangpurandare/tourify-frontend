@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState('');
@@ -15,14 +16,12 @@ export default function ForgotPasswordPage() {
     if (!email.trim()) return;
     setLoading(true);
     try {
-      const redirectTo =
-        typeof window !== 'undefined'
-          ? `${window.location.origin}/reset-password`
-          : undefined;
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-        redirectTo,
+      const res = await fetch(`${API_URL}/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim() }),
       });
-      if (error) throw error;
+      if (!res.ok) throw new Error('Failed to send reset email');
       setSent(true);
       toast.success('Check your email for a reset link');
     } catch (err: unknown) {

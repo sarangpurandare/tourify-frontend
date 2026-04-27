@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/lib/auth';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
 
 function ImpersonationConsumer({ token }: { token: string }) {
   const { loginAsImpersonator } = useAuth();
@@ -106,13 +107,8 @@ function ProdOrgEntry() {
     if (!normalised) return;
     setLoading(true);
     try {
-      const { data } = await supabase
-        .from('organisations')
-        .select('slug')
-        .eq('slug', normalised)
-        .eq('is_active', true)
-        .single();
-      if (!data) {
+      const res = await fetch(`${API_URL}/orgs/${normalised}`);
+      if (!res.ok) {
         setError('Organisation not found');
         return;
       }
