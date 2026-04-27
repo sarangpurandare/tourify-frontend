@@ -16,7 +16,13 @@ export interface Booking {
   internal_notes?: string;
   cancelled_at?: string;
   cancellation_reason?: string;
+  source?: string;
+  source_details?: string;
+  referral_code?: string;
+  agent_name?: string;
+  promo_code_id?: string;
   created_by?: string;
+  portal_token: string;
   created_at: string;
   updated_at: string;
   traveller_name?: string;
@@ -24,6 +30,20 @@ export interface Booking {
   departure_date?: string;
   total_paid: number;
 }
+
+export const BOOKING_SOURCES = [
+  { value: 'direct', label: 'Direct' },
+  { value: 'website', label: 'Website' },
+  { value: 'referral', label: 'Referral' },
+  { value: 'social_media', label: 'Social Media' },
+  { value: 'walk_in', label: 'Walk-in' },
+  { value: 'phone', label: 'Phone' },
+  { value: 'agent', label: 'Agent' },
+  { value: 'repeat', label: 'Repeat Customer' },
+  { value: 'partner', label: 'Partner' },
+  { value: 'google_ads', label: 'Google Ads' },
+  { value: 'other', label: 'Other' },
+] as const;
 
 export interface Payment {
   id: string;

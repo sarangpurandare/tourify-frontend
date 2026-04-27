@@ -9,6 +9,7 @@ import type { TripMaster } from '@/types/trip';
 import type { StaffUser } from '@/types/staff';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { EntitySearch } from '@/components/entity-search';
 import {
   Dialog,
   DialogContent,
@@ -189,6 +190,9 @@ export default function LeadsPage() {
       setNewLead(EMPTY_LEAD_FORM);
       setSelectedId(res.data.id);
     },
+    onError: (err: Error) => {
+      alert(err.message || 'Failed to create lead');
+    },
   });
 
   const updateStageMutation = useMutation({
@@ -200,6 +204,9 @@ export default function LeadsPage() {
       queryClient.invalidateQueries({ queryKey: ['lead-activities', selectedId] });
       setStageDialogOpen(false);
     },
+    onError: (err: Error) => {
+      alert(err.message || 'Failed to update lead stage');
+    },
   });
 
   const createActivityMutation = useMutation({
@@ -209,6 +216,9 @@ export default function LeadsPage() {
       queryClient.invalidateQueries({ queryKey: ['lead-activities', selectedId] });
       setActivityOpen(false);
       setActivityDesc('');
+    },
+    onError: (err: Error) => {
+      alert(err.message || 'Failed to log activity');
     },
   });
 
@@ -222,6 +232,9 @@ export default function LeadsPage() {
       queryClient.invalidateQueries({ queryKey: ['travellers'] });
       setConvertOpen(false);
       setConvertTravellerId('');
+    },
+    onError: (err: Error) => {
+      alert(err.message || 'Failed to convert lead');
     },
   });
 
@@ -701,12 +714,22 @@ export default function LeadsPage() {
             <div className="grid grid-cols-2 gap-4">
               <div className="grid gap-2">
                 <Label>Interested Trip</Label>
-                <Select value={newLead.interested_trip_id || undefined} onValueChange={(val) => val !== null && setNewLead((p) => ({ ...p, interested_trip_id: val as string }))}>
-                  <SelectTrigger className="w-full"><SelectValue placeholder="Select trip" /></SelectTrigger>
-                  <SelectContent>
-                    {trips.map((t) => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <EntitySearch
+                  options={trips.map(t => ({
+                    id: t.id,
+                    label: t.name,
+                    sublabel: [
+                      t.destinations?.join(', '),
+                      t.duration_days ? `${t.duration_days}D` : null,
+                    ].filter(Boolean).join(' · '),
+                    imageUrl: t.hero_image_urls?.[0],
+                    initials: t.name.split(' ').map(w => w[0]).join('').slice(0, 2),
+                  }))}
+                  value={newLead.interested_trip_id}
+                  onChange={(id) => setNewLead(p => ({ ...p, interested_trip_id: id }))}
+                  placeholder="Search trips…"
+                  emptyMessage="No trips found"
+                />
               </div>
               <div className="grid gap-2">
                 <Label>Priority</Label>
@@ -728,12 +751,18 @@ export default function LeadsPage() {
               </div>
               <div className="grid gap-2">
                 <Label>Assigned To</Label>
-                <Select value={newLead.assigned_to || undefined} onValueChange={(val) => val !== null && setNewLead((p) => ({ ...p, assigned_to: val as string }))}>
-                  <SelectTrigger className="w-full"><SelectValue placeholder="Select staff" /></SelectTrigger>
-                  <SelectContent>
-                    {staff.filter((s) => s.is_active).map((s) => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <EntitySearch
+                  options={staff.filter(s => s.is_active).map(s => ({
+                    id: s.id,
+                    label: s.name,
+                    sublabel: s.email,
+                    initials: s.name.split(' ').map(w => w[0]).join('').slice(0, 2),
+                  }))}
+                  value={newLead.assigned_to}
+                  onChange={(id) => setNewLead(p => ({ ...p, assigned_to: id }))}
+                  placeholder="Search staff…"
+                  emptyMessage="No active staff"
+                />
               </div>
             </div>
             <div className="grid gap-2">

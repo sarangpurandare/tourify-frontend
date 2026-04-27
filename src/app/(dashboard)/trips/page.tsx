@@ -24,7 +24,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, MapPin, Clock, Tag, Search, ImageIcon } from 'lucide-react';
+import { Plus, MapPin, Clock, Tag, Search, ImageIcon, Users, User, Archive, ChevronDown } from 'lucide-react';
 import { thumbUrl } from '@/lib/utils';
 
 /* ─── Helpers ─────────────────────────────────── */
@@ -70,7 +70,8 @@ const INITIAL_FORM = {
   tags: '',
 };
 
-const STATUS_OPTIONS = ['all', 'published', 'draft', 'archived'] as const;
+const STATUS_OPTIONS = ['all', 'published', 'draft'] as const;
+const ARCHIVED_STATUSES = ['archived', 'retired'];
 
 /* ─── Page ────────────────────────────────────── */
 
@@ -79,9 +80,11 @@ export default function TripsPage() {
   const queryClient = useQueryClient();
 
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [form, setForm] = useState(INITIAL_FORM);
+  const [tripType, setTripType] = useState<'group' | 'private'>('group');
 
   const queryParams = statusFilter !== 'all' ? `?status=${statusFilter}` : '';
   const { data, isLoading } = useQuery({
@@ -96,31 +99,41 @@ export default function TripsPage() {
       queryClient.invalidateQueries({ queryKey: ['trips'] });
       setDialogOpen(false);
       setForm(INITIAL_FORM);
+      setTripType('group');
       router.push(`/trips/${res.data.id}`);
     },
   });
 
   const trips = data?.data ?? [];
+  const [showArchive, setShowArchive] = useState(false);
 
-  // Client-side search filter
-  const filtered = search
-    ? trips.filter(t =>
-        t.name.toLowerCase().includes(search.toLowerCase()) ||
-        (t.destinations ?? []).some(d => d.toLowerCase().includes(search.toLowerCase())) ||
-        (t.tags ?? []).some(tag => tag.toLowerCase().includes(search.toLowerCase()))
-      )
-    : trips;
+  // Split active vs archived
+  const activeTrips = trips.filter(t => !ARCHIVED_STATUSES.includes(t.status));
+  const archivedTrips = trips.filter(t => ARCHIVED_STATUSES.includes(t.status));
+
+  // Client-side search + type filter (on active only)
+  const filtered = activeTrips.filter(t => {
+    if (typeFilter !== 'all' && (t.trip_type || 'group') !== typeFilter) return false;
+    if (search) {
+      const q = search.toLowerCase();
+      return t.name.toLowerCase().includes(q) ||
+        (t.destinations ?? []).some(d => d.toLowerCase().includes(q)) ||
+        (t.tags ?? []).some(tag => tag.toLowerCase().includes(q));
+    }
+    return true;
+  });
 
   function handleCreate() {
     if (!form.name.trim() || !form.slug.trim()) return;
     const body: Record<string, unknown> = {
       name: form.name.trim(),
       slug: form.slug.trim(),
+      trip_type: tripType,
     };
     if (form.short_description) body.short_description = form.short_description;
     if (form.duration_days) body.duration_days = Number(form.duration_days);
     if (form.duration_nights) body.duration_nights = Number(form.duration_nights);
-    if (form.base_price_cents) body.base_price_cents = Number(form.base_price_cents);
+    if (form.base_price_cents) body.base_price_cents = Number(form.base_price_cents) * 100;
     if (form.difficulty_level) body.difficulty_level = Number(form.difficulty_level);
     if (form.destinations) body.destinations = form.destinations.split(',').map(s => s.trim()).filter(Boolean);
     if (form.tags) body.tags = form.tags.split(',').map(s => s.trim()).filter(Boolean);
@@ -147,6 +160,24 @@ export default function TripsPage() {
               <DialogDescription>Define a new trip template.</DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
+              <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+                <button
+                  type="button"
+                  className={`crm-btn sm ${tripType === 'group' ? 'primary' : ''}`}
+                  onClick={() => setTripType('group')}
+                  style={{ flex: 1 }}
+                >
+                  <Users size={14} /> Group Tour
+                </button>
+                <button
+                  type="button"
+                  className={`crm-btn sm ${tripType === 'private' ? 'primary' : ''}`}
+                  onClick={() => setTripType('private')}
+                  style={{ flex: 1 }}
+                >
+                  <User size={14} /> Private Trip
+                </button>
+              </div>
               <div className="grid gap-2">
                 <Label htmlFor="trip-name">Name *</Label>
                 <Input
@@ -201,13 +232,13 @@ export default function TripsPage() {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                 <div className="grid gap-2">
-                  <Label htmlFor="trip-price">Base Price (cents)</Label>
+                  <Label htmlFor="trip-price">Base Price (₹)</Label>
                   <Input
                     id="trip-price"
                     type="number"
                     value={form.base_price_cents}
                     onChange={(e) => setForm(prev => ({ ...prev, base_price_cents: e.target.value }))}
-                    placeholder="e.g. 250000"
+                    placeholder="e.g. 25000"
                   />
                 </div>
                 <div className="grid gap-2">
@@ -268,6 +299,14 @@ export default function TripsPage() {
             </button>
           ))}
         </div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {['all', 'group', 'private'].map(t => (
+            <button key={t} className={`crm-btn sm ${typeFilter === t ? 'primary' : ''}`}
+              onClick={() => setTypeFilter(t)}>
+              {t === 'all' ? 'All' : t === 'group' ? 'Group Tours' : 'Private Trips'}
+            </button>
+          ))}
+        </div>
         <div style={{ flex: 1 }} />
         <div className="crm-card" style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 12px' }}>
           <Search size={14} style={{ color: 'var(--crm-text-3)' }} />
@@ -325,10 +364,15 @@ export default function TripsPage() {
               <div style={{ padding: 20 }}>
               {/* Status pill */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                <span className={`crm-pill ${statusPillColor(trip.status)}`}>
-                  <span className="dot" />
-                  {trip.status}
-                </span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span className={`crm-pill ${statusPillColor(trip.status)}`}>
+                    <span className="dot" />
+                    {trip.status}
+                  </span>
+                  <span className={`crm-pill ${(trip.trip_type || 'group') === 'private' ? 'purple' : ''}`}>
+                    {(trip.trip_type || 'group') === 'private' ? 'Private' : 'Group'}
+                  </span>
+                </div>
                 {trip.difficulty_level && (
                   <span className="crm-caption">
                     Difficulty {trip.difficulty_level}/5
@@ -389,6 +433,43 @@ export default function TripsPage() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* Archive section */}
+      {archivedTrips.length > 0 && (
+        <div style={{ marginTop: 32 }}>
+          <button
+            className="crm-btn sm ghost"
+            onClick={() => setShowArchive(!showArchive)}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--crm-text-3)' }}
+          >
+            <Archive size={14} />
+            Archive ({archivedTrips.length})
+            <ChevronDown size={12} style={{ transform: showArchive ? 'rotate(180deg)' : undefined, transition: 'transform 0.2s' }} />
+          </button>
+          {showArchive && (
+            <div style={{ marginTop: 12, padding: 16, background: 'var(--crm-bg-2)', borderRadius: 10, border: '1px dashed var(--crm-hairline)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+                {archivedTrips.map((trip) => (
+                  <div
+                    key={trip.id}
+                    className="crm-card crm-card-pad"
+                    style={{ cursor: 'pointer', opacity: 0.7 }}
+                    onClick={() => router.push(`/trips/${trip.id}`)}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontWeight: 600, fontSize: 14 }}>{trip.name}</span>
+                      <span className="crm-pill">{trip.status}</span>
+                    </div>
+                    <span className="crm-caption" style={{ marginTop: 4 }}>
+                      {trip.destinations?.join(', ') || 'No destinations'}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

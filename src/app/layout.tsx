@@ -8,8 +8,8 @@ import { Toaster } from "@/components/ui/sonner";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Boarding Pass Tours — CRM",
-  description: "Operations platform for Boarding Pass Tours",
+  title: "Tourify — CRM",
+  description: "Operations platform for tour operators",
 };
 
 export default function RootLayout({

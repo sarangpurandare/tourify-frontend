@@ -78,6 +78,9 @@ export default function StaffPage() {
       setAddOpen(false);
       setNewStaff({ name: '', email: '', password: '', phone: '', role: 'viewer' });
     },
+    onError: (err: Error) => {
+      alert(err.message || 'Something went wrong');
+    },
   });
 
   const updateMutation = useMutation({
@@ -87,6 +90,9 @@ export default function StaffPage() {
       queryClient.invalidateQueries({ queryKey: ['staff'] });
       setEditOpen(false);
       setEditingStaff(null);
+    },
+    onError: (err: Error) => {
+      alert(err.message || 'Something went wrong');
     },
   });
 
@@ -133,6 +139,9 @@ export default function StaffPage() {
     if (Object.keys(body).length === 0) {
       setEditOpen(false);
       return;
+    }
+    if (body.is_active === false) {
+      if (!window.confirm(`Deactivate ${editingStaff.name}? They will lose access to the system.`)) return;
     }
     updateMutation.mutate({ id: editingStaff.id, body });
   }

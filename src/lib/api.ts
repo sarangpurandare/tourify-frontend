@@ -1,17 +1,22 @@
 import { supabase } from './supabase';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
-const DEV_BYPASS = process.env.NEXT_PUBLIC_DEV_AUTH_BYPASS === 'true';
+const IMPERSONATION_TOKEN_KEY = 'tourify_imp_token';
+const IMPERSONATION_FLAG_KEY = 'tourify_imp_active';
+
+function getImpersonationJwt(): string | null {
+  if (typeof window === 'undefined') return null;
+  if (sessionStorage.getItem(IMPERSONATION_FLAG_KEY) !== 'true') return null;
+  return sessionStorage.getItem(IMPERSONATION_TOKEN_KEY);
+}
 
 async function getAuthHeaders(): Promise<HeadersInit> {
   const headers: HeadersInit = {
     'Content-Type': 'application/json',
   };
-  if (DEV_BYPASS) {
-    const staffId = typeof window !== 'undefined' ? localStorage.getItem('dev_staff_id') : null;
-    if (staffId) {
-      headers['X-Dev-Staff-Id'] = staffId;
-    }
+  const impersonationJwt = getImpersonationJwt();
+  if (impersonationJwt) {
+    headers['Authorization'] = `Bearer ${impersonationJwt}`;
     return headers;
   }
   const { data: { session } } = await supabase.auth.getSession();
@@ -68,22 +73,21 @@ export const api = {
     return handleResponse<T>(response);
   },
 
-  async delete<T>(path: string): Promise<T> {
+  async delete<T>(path: string, body?: unknown): Promise<T> {
     const headers = await getAuthHeaders();
     const response = await fetch(`${API_URL}${path}`, {
       method: 'DELETE',
       headers,
+      body: body ? JSON.stringify(body) : undefined,
     });
     return handleResponse<T>(response);
   },
 
   async upload<T>(path: string, formData: FormData): Promise<T> {
     const headers: HeadersInit = {};
-    if (DEV_BYPASS) {
-      const staffId = typeof window !== 'undefined' ? localStorage.getItem('dev_staff_id') : null;
-      if (staffId) {
-        headers['X-Dev-Staff-Id'] = staffId;
-      }
+    const impJwt = getImpersonationJwt();
+    if (impJwt) {
+      headers['Authorization'] = `Bearer ${impJwt}`;
     } else {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.access_token) {

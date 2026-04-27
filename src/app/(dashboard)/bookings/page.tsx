@@ -4,14 +4,17 @@ import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { Booking, Payment, BookingDocument } from '@/types/booking';
+import type { DepartureChecklistItem } from '@/types/checklist';
+import type { Group } from '@/types/group';
 import { Departure } from '@/types/departure';
 import { Traveller } from '@/types/traveller';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { FileUpload } from '@/components/ui/file-upload';
-import { CalendarCheck, CreditCard, FileCheck, X, Plus, IndianRupee, AlertCircle, CheckCircle2, Clock, Ban } from 'lucide-react';
+import { EntitySearch } from '@/components/entity-search';
+import { CalendarCheck, CreditCard, FileCheck, X, Plus, IndianRupee, AlertCircle, CheckCircle2, Clock, Ban, Link2, DollarSign, FileText, Eye, XCircle, Users } from 'lucide-react';
+import { toast } from 'sonner';
 
 interface APIResponse<T> { data: T }
 interface APIList<T> { data: T[]; meta: { page: number; per_page: number; total: number } }
@@ -32,9 +35,13 @@ const PAYMENT_STATUSES: Record<string, { label: string; color: string; icon: typ
   waived: { label: 'Waived', color: 'var(--crm-text-3)', icon: Ban },
 };
 
-function formatPrice(cents?: number | null) {
+function formatPrice(cents?: number | null, currency = 'INR') {
   if (cents == null) return '--';
-  return '₹' + (cents / 100).toLocaleString('en-IN');
+  try {
+    return new Intl.NumberFormat('en-IN', { style: 'currency', currency, maximumFractionDigits: 0 }).format(cents / 100);
+  } catch {
+    return `${currency} ${(cents / 100).toLocaleString('en-IN')}`;
+  }
 }
 
 function formatDate(d?: string | null) {
@@ -60,7 +67,8 @@ export default function BookingsPage() {
   const [paymentOpen, setPaymentOpen] = useState(false);
   const [docOpen, setDocOpen] = useState(false);
 
-  const [newBooking, setNewBooking] = useState({ departure_id: '', traveller_id: '', final_price_cents: '', room_type_preference: '', special_requests: '' });
+  const [newBooking, setNewBooking] = useState({ departure_id: '', traveller_id: '', final_price_rupees: '', room_type_preference: '', special_requests: '' });
+  const [priceError, setPriceError] = useState('');
   const [newPayment, setNewPayment] = useState({ amount: '', type: 'installment', status: 'completed', payment_method: 'bank_transfer', reference_number: '', notes: '' });
   const [newDoc, setNewDoc] = useState({ document_type: 'passport_copy', label: '', is_required: true });
 
@@ -93,20 +101,6 @@ export default function BookingsPage() {
 
   const selected = bookings.find(b => b.id === selectedId) ?? null;
 
-  const { data: paymentsData } = useQuery({
-    queryKey: ['payments', selectedId],
-    queryFn: () => api.get<APIResponse<Payment[]>>(`/bookings/${selectedId}/payments`),
-    enabled: !!selectedId,
-  });
-  const payments = paymentsData?.data ?? [];
-
-  const { data: docsData } = useQuery({
-    queryKey: ['documents', selectedId],
-    queryFn: () => api.get<APIResponse<BookingDocument[]>>(`/bookings/${selectedId}/documents`),
-    enabled: !!selectedId,
-  });
-  const docs = docsData?.data ?? [];
-
   const createMutation = useMutation({
     mutationFn: (body: Record<string, unknown>) => api.post<APIResponse<Booking>>('/bookings', body),
     onSuccess: (res) => {
@@ -114,12 +108,18 @@ export default function BookingsPage() {
       setAddOpen(false);
       setSelectedId(res.data.id);
     },
+    onError: (err: Error) => {
+      alert(err.message || 'Failed to create booking');
+    },
   });
 
   const cancelMutation = useMutation({
     mutationFn: ({ id, reason }: { id: string; reason?: string }) => api.post<APIResponse<unknown>>(`/bookings/${id}/cancel`, { reason }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['bookings'] });
+    },
+    onError: (err: Error) => {
+      alert(err.message || 'Failed to cancel booking');
     },
   });
 
@@ -132,6 +132,9 @@ export default function BookingsPage() {
       setPaymentOpen(false);
       setNewPayment({ amount: '', type: 'installment', status: 'completed', payment_method: 'bank_transfer', reference_number: '', notes: '' });
     },
+    onError: (err: Error) => {
+      alert(err.message || 'Failed to record payment');
+    },
   });
 
   const createDocMutation = useMutation({
@@ -142,31 +145,16 @@ export default function BookingsPage() {
       setDocOpen(false);
       setNewDoc({ document_type: 'passport_copy', label: '', is_required: true });
     },
-  });
-
-  const updateDocMutation = useMutation({
-    mutationFn: ({ bookingId, docId, body }: { bookingId: string; docId: string; body: Record<string, unknown> }) =>
-      api.patch<APIResponse<unknown>>(`/bookings/${bookingId}/documents/${docId}`, body),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['documents', selectedId] });
+    onError: (err: Error) => {
+      alert(err.message || 'Failed to add document requirement');
     },
   });
 
-  const updatePaymentMutation = useMutation({
-    mutationFn: ({ bookingId, paymentId, body }: { bookingId: string; paymentId: string; body: Record<string, unknown> }) =>
-      api.patch<APIResponse<unknown>>(`/bookings/${bookingId}/payments/${paymentId}`, body),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['payments', selectedId] });
-    },
-  });
-
-  const totalPaid = payments.filter(p => p.status === 'completed').reduce((s, p) => s + p.amount_cents, 0);
-  const balance = selected?.final_price_cents ? selected.final_price_cents - totalPaid : 0;
 
   return (
-    <div style={{ display: 'flex', height: '100%', overflow: 'hidden' }}>
+    <div style={{ height: '100%', overflow: 'auto', padding: 24 }}>
       {/* Main content */}
-      <div style={{ flex: 1, overflow: 'auto', padding: 24 }}>
+      <div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
           <div>
             <h1 className="crm-page-title">Bookings</h1>
@@ -226,10 +214,15 @@ export default function BookingsPage() {
                 const ps = PAYMENT_STATUSES[b.payment_status] ?? { label: b.payment_status, color: 'var(--crm-text-3)', icon: Clock };
                 return (
                   <tr key={b.id} onClick={() => setSelectedId(b.id)}
-                    style={{ borderBottom: '1px solid var(--crm-border)', cursor: 'pointer', background: b.id === selectedId ? 'var(--crm-bg-2)' : undefined }}
-                    onMouseOver={e => { if (b.id !== selectedId) (e.currentTarget.style.background = 'var(--crm-bg-2)'); }}
-                    onMouseOut={e => { if (b.id !== selectedId) (e.currentTarget.style.background = ''); }}>
-                    <td style={{ padding: '12px 16px', fontWeight: 500 }}>{b.traveller_name || '--'}</td>
+                    style={{ borderBottom: '1px solid var(--crm-border)', cursor: 'pointer' }}
+                    onMouseOver={e => (e.currentTarget.style.background = 'var(--crm-bg-2)')}
+                    onMouseOut={e => (e.currentTarget.style.background = '')}>
+                    <td style={{ padding: '12px 16px', fontWeight: 500 }}>
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                        {b.traveller_name || '--'}
+                        {b.group_id && <Users size={12} style={{ color: 'var(--crm-accent)' }} />}
+                      </span>
+                    </td>
                     <td style={{ padding: '12px 16px' }}>
                       <div>{b.trip_name || '--'}</div>
                       <div className="crm-dim" style={{ fontSize: 11 }}>{formatDate(b.departure_date)}</div>
@@ -238,8 +231,8 @@ export default function BookingsPage() {
                       <span style={{ display: 'inline-block', padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: bs.color + '18', color: bs.color }}>{bs.label}</span>
                     </td>
                     <td style={{ padding: '12px 16px', fontWeight: 500 }}>
-                      <div>{formatPrice(b.final_price_cents)}</div>
-                      {b.total_paid > 0 && <div style={{ fontSize: 11, color: 'var(--crm-green)' }}>Paid: {formatPrice(b.total_paid)}</div>}
+                      <div>{formatPrice(b.final_price_cents, b.currency)}</div>
+                      {b.total_paid > 0 && <div style={{ fontSize: 11, color: 'var(--crm-green)' }}>Paid: {formatPrice(b.total_paid, b.currency)}</div>}
                     </td>
                     <td style={{ padding: '12px 16px' }}>
                       <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: ps.color + '18', color: ps.color }}>
@@ -258,178 +251,16 @@ export default function BookingsPage() {
         </div>
       </div>
 
-      {/* Detail sidebar */}
-      {selected && (
-        <div style={{ width: 380, borderLeft: '1px solid var(--crm-border)', overflow: 'auto', background: 'var(--crm-bg)', padding: 20 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-            <h2 style={{ fontSize: 16, fontWeight: 600 }}>{selected.traveller_name}</h2>
-            <button onClick={() => setSelectedId(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--crm-text-3)' }}><X size={18} /></button>
-          </div>
-
-          <div style={{ display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap' }}>
-            <span style={{ padding: '2px 10px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: (BOOKING_STATUSES[selected.status]?.color ?? 'gray') + '18', color: BOOKING_STATUSES[selected.status]?.color ?? 'gray' }}>
-              {BOOKING_STATUSES[selected.status]?.label ?? selected.status}
-            </span>
-            <span style={{ padding: '2px 10px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: (PAYMENT_STATUSES[selected.payment_status]?.color ?? 'gray') + '18', color: PAYMENT_STATUSES[selected.payment_status]?.color ?? 'gray' }}>
-              {PAYMENT_STATUSES[selected.payment_status]?.label ?? selected.payment_status}
-            </span>
-          </div>
-
-          <div className="crm-card" style={{ padding: 12, marginBottom: 12 }}>
-            <div style={{ fontSize: 11, color: 'var(--crm-text-3)', textTransform: 'uppercase', marginBottom: 8 }}>Trip Details</div>
-            <div style={{ fontSize: 14, fontWeight: 500 }}>{selected.trip_name || '--'}</div>
-            <div className="crm-dim" style={{ fontSize: 12 }}>Departure: {formatDate(selected.departure_date)}</div>
-            {selected.room_type_preference && <div className="crm-dim" style={{ fontSize: 12, marginTop: 4 }}>Room: {selected.room_type_preference.replace('_', ' ')}</div>}
-            {selected.special_requests && <div style={{ fontSize: 12, marginTop: 4, fontStyle: 'italic', color: 'var(--crm-text-3)' }}>{selected.special_requests}</div>}
-          </div>
-
-          {/* Financial summary */}
-          <div className="crm-card" style={{ padding: 12, marginBottom: 12 }}>
-            <div style={{ fontSize: 11, color: 'var(--crm-text-3)', textTransform: 'uppercase', marginBottom: 8 }}>Financials</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--crm-text-3)' }}>Total</div>
-                <div style={{ fontSize: 15, fontWeight: 600 }}>{formatPrice(selected.final_price_cents)}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--crm-text-3)' }}>Paid</div>
-                <div style={{ fontSize: 15, fontWeight: 600, color: 'var(--crm-green)' }}>{formatPrice(totalPaid)}</div>
-              </div>
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--crm-text-3)' }}>Balance</div>
-                <div style={{ fontSize: 15, fontWeight: 600, color: balance > 0 ? 'var(--crm-red)' : 'var(--crm-green)' }}>{formatPrice(balance)}</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Quick actions */}
-          <div style={{ display: 'flex', gap: 6, marginBottom: 16 }}>
-            <Button size="sm" onClick={() => setPaymentOpen(true)} style={{ gap: 4, flex: 1 }}>
-              <CreditCard size={13} /> Record Payment
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => setDocOpen(true)} style={{ gap: 4, flex: 1 }}>
-              <FileCheck size={13} /> Add Doc
-            </Button>
-            {selected.status !== 'cancelled' && (
-              <Button size="sm" variant="outline" onClick={() => {
-                if (confirm('Cancel this booking?')) cancelMutation.mutate({ id: selected.id });
-              }} style={{ gap: 4, color: 'var(--crm-red)' }}>
-                <Ban size={13} />
-              </Button>
-            )}
-          </div>
-
-          {/* Payments list */}
-          <div style={{ marginBottom: 16 }}>
-            <div style={{ fontSize: 11, color: 'var(--crm-text-3)', textTransform: 'uppercase', marginBottom: 8 }}>Payments ({payments.length})</div>
-            {payments.map(p => (
-              <div key={p.id} className="crm-card" style={{ padding: '8px 12px', marginBottom: 6 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <span style={{ fontWeight: 600, fontSize: 13 }}>{formatPrice(p.amount_cents)}</span>
-                    <span className="crm-dim" style={{ fontSize: 11, marginLeft: 6 }}>{p.type}</span>
-                  </div>
-                  <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, fontWeight: 600,
-                    background: p.status === 'completed' ? 'var(--crm-green)18' : 'var(--crm-amber)18',
-                    color: p.status === 'completed' ? 'var(--crm-green)' : 'var(--crm-amber)' }}>
-                    {p.status}
-                  </span>
-                </div>
-                <div className="crm-dim" style={{ fontSize: 11 }}>
-                  {p.payment_method?.replace('_', ' ')} {p.reference_number ? `• ${p.reference_number}` : ''}
-                  {p.paid_date ? ` • ${formatDate(p.paid_date)}` : p.scheduled_date ? ` • Due: ${formatDate(p.scheduled_date)}` : ''}
-                </div>
-                {p.receipt_url ? (
-                  <a href={p.receipt_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: 'var(--crm-accent)', display: 'inline-block', marginTop: 4 }}>
-                    View receipt
-                  </a>
-                ) : p.status === 'completed' && (
-                  <div style={{ marginTop: 4 }}>
-                    <FileUpload
-                      value={p.receipt_url}
-                      onChange={async (url) => {
-                        if (url) {
-                          await updatePaymentMutation.mutateAsync({
-                            bookingId: selected.id,
-                            paymentId: p.id,
-                            body: { receipt_url: url },
-                          });
-                        }
-                      }}
-                      accept="image/*,.pdf"
-                      label="Upload receipt"
-                      compact
-                    />
-                  </div>
-                )}
-              </div>
-            ))}
-            {payments.length === 0 && <div className="crm-dim" style={{ fontSize: 12 }}>No payments recorded</div>}
-          </div>
-
-          {/* Documents list */}
-          <div>
-            <div style={{ fontSize: 11, color: 'var(--crm-text-3)', textTransform: 'uppercase', marginBottom: 8 }}>Documents ({docs.length})</div>
-            {docs.map(d => {
-              const statusColor = d.status === 'verified' ? 'var(--crm-green)' : d.status === 'rejected' ? 'var(--crm-red)' : d.status === 'uploaded' ? 'var(--crm-blue)' : 'var(--crm-amber)';
-              return (
-                <div key={d.id} className="crm-card" style={{ padding: '8px 12px', marginBottom: 6 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <span style={{ fontWeight: 500, fontSize: 12 }}>{d.label}</span>
-                      {d.is_required && <span style={{ fontSize: 10, color: 'var(--crm-red)', marginLeft: 4 }}>*</span>}
-                    </div>
-                    <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, fontWeight: 600, background: statusColor + '18', color: statusColor }}>{d.status}</span>
-                  </div>
-                  <div className="crm-dim" style={{ fontSize: 11 }}>{d.document_type.replace(/_/g, ' ')}</div>
-                  {d.status === 'pending' && (
-                    <div style={{ marginTop: 6 }}>
-                      <FileUpload
-                        value={d.file_url}
-                        onChange={async (url) => {
-                          if (url) {
-                            await updateDocMutation.mutateAsync({
-                              bookingId: selected.id,
-                              docId: d.id,
-                              body: { status: 'uploaded', file_url: url },
-                            });
-                          }
-                        }}
-                        accept="image/*,.pdf"
-                        label="Upload document"
-                        compact
-                      />
-                    </div>
-                  )}
-                  {d.file_url && d.status !== 'pending' && (
-                    <a href={d.file_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 12, color: 'var(--crm-accent)', display: 'inline-block', marginTop: 4 }}>
-                      View document
-                    </a>
-                  )}
-                  {d.status === 'uploaded' && (
-                    <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-                      <button onClick={() => updateDocMutation.mutate({ bookingId: selected.id, docId: d.id, body: { status: 'verified' } })}
-                        style={{ fontSize: 10, padding: '2px 8px', borderRadius: 4, border: '1px solid var(--crm-green)', background: 'none', color: 'var(--crm-green)', cursor: 'pointer' }}>Verify</button>
-                      <button onClick={() => updateDocMutation.mutate({ bookingId: selected.id, docId: d.id, body: { status: 'rejected', rejection_reason: 'Document unclear' } })}
-                        style={{ fontSize: 10, padding: '2px 8px', borderRadius: 4, border: '1px solid var(--crm-red)', background: 'none', color: 'var(--crm-red)', cursor: 'pointer' }}>Reject</button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            {docs.length === 0 && <div className="crm-dim" style={{ fontSize: 12 }}>No document requirements set</div>}
-          </div>
-
-          {/* Emergency contact */}
-          {selected.emergency_contact_name && (
-            <div className="crm-card" style={{ padding: 12, marginTop: 12 }}>
-              <div style={{ fontSize: 11, color: 'var(--crm-text-3)', textTransform: 'uppercase', marginBottom: 4 }}>Emergency Contact</div>
-              <div style={{ fontSize: 13 }}>{selected.emergency_contact_name} ({selected.emergency_contact_relation || '--'})</div>
-              <div className="crm-dim" style={{ fontSize: 12 }}>{selected.emergency_contact_phone}</div>
-            </div>
-          )}
-        </div>
-      )}
+      {/* Booking Detail Dialog */}
+      <BookingDetailDialog
+        booking={selected}
+        open={!!selectedId}
+        onOpenChange={(v) => { if (!v) setSelectedId(null); }}
+        onRecordPayment={() => setPaymentOpen(true)}
+        onRequestDoc={() => setDocOpen(true)}
+        onCancel={(reason) => { if (selectedId) cancelMutation.mutate({ id: selectedId, reason }); }}
+        cancelling={cancelMutation.isPending}
+      />
 
       {/* Add Booking dialog */}
       <Dialog open={addOpen} onOpenChange={setAddOpen}>
@@ -438,43 +269,38 @@ export default function BookingsPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div>
               <label className="crm-caption">Departure</label>
-              <Select value={newBooking.departure_id || undefined} onValueChange={(val) => setNewBooking(s => ({ ...s, departure_id: val ?? '' }))}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select departure...">
-                    {(() => { const dep = departures.find(d => d.id === newBooking.departure_id); return dep ? `${dep.trip_name || 'Unnamed trip'} — ${formatDate(dep.start_date)}` : 'Select departure...'; })()}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent style={{ minWidth: 400 }}>
-                  {departures.map(dep => (
-                    <SelectItem key={dep.id} value={dep.id}>
-                      {dep.trip_name || 'Unnamed trip'} — {formatDate(dep.start_date)} ({dep.spots_remaining} spots left)
-                    </SelectItem>
-                  ))}
-                  {departures.length === 0 && <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--crm-text-3)' }}>No departures found</div>}
-                </SelectContent>
-              </Select>
+              <EntitySearch
+                options={departures.map(dep => ({
+                  id: dep.id,
+                  label: `${dep.trip_name || 'Unnamed trip'} — ${formatDate(dep.start_date)}`,
+                  sublabel: `${dep.spots_remaining} spots left · ${dep.status}`,
+                  initials: (dep.trip_name || 'U')[0],
+                }))}
+                value={newBooking.departure_id}
+                onChange={(id) => setNewBooking(s => ({ ...s, departure_id: id }))}
+                placeholder="Search departures…"
+                emptyMessage="No departures found"
+              />
             </div>
             <div>
               <label className="crm-caption">Traveller</label>
-              <Select value={newBooking.traveller_id || undefined} onValueChange={(val) => setNewBooking(s => ({ ...s, traveller_id: val ?? '' }))}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select traveller...">
-                    {(() => { const t = travellers.find(tr => tr.id === newBooking.traveller_id); return t ? `${t.full_legal_name}${t.city ? ` — ${t.city}` : ''}` : 'Select traveller...'; })()}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent style={{ minWidth: 400 }}>
-                  {travellers.map(t => (
-                    <SelectItem key={t.id} value={t.id}>
-                      {t.full_legal_name}{t.city ? ` — ${t.city}` : ''}{t.phone ? ` (${t.phone})` : ''}
-                    </SelectItem>
-                  ))}
-                  {travellers.length === 0 && <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--crm-text-3)' }}>No travellers found</div>}
-                </SelectContent>
-              </Select>
+              <EntitySearch
+                options={travellers.map(t => ({
+                  id: t.id,
+                  label: t.full_legal_name,
+                  sublabel: [t.city, t.phone, t.email].filter(Boolean).join(' · '),
+                  initials: t.full_legal_name.split(' ').map(w => w[0]).join('').slice(0, 2),
+                }))}
+                value={newBooking.traveller_id}
+                onChange={(id) => setNewBooking(s => ({ ...s, traveller_id: id }))}
+                placeholder="Search travellers…"
+                emptyMessage="No travellers found"
+              />
             </div>
             <div>
               <label className="crm-caption">Final Price (₹)</label>
-              <Input type="number" value={newBooking.final_price_cents} onChange={e => setNewBooking(s => ({ ...s, final_price_cents: e.target.value }))} placeholder="Amount in rupees" />
+              <Input type="number" value={newBooking.final_price_rupees} onChange={e => { setNewBooking(s => ({ ...s, final_price_rupees: e.target.value })); setPriceError(''); }} placeholder="Amount in rupees" />
+              {priceError && <div style={{ color: 'var(--crm-red)', fontSize: 12, marginTop: 4 }}>{priceError}</div>}
             </div>
             <div>
               <label className="crm-caption">Room Preference</label>
@@ -495,7 +321,15 @@ export default function BookingsPage() {
           </div>
           <DialogFooter>
             <Button onClick={() => {
-              const priceCents = newBooking.final_price_cents ? parseInt(newBooking.final_price_cents) * 100 : undefined;
+              if (newBooking.final_price_rupees) {
+                const parsed = Number(newBooking.final_price_rupees);
+                if (isNaN(parsed) || parsed <= 0 || !Number.isFinite(parsed)) {
+                  setPriceError('Please enter a valid positive number');
+                  return;
+                }
+              }
+              setPriceError('');
+              const priceCents = newBooking.final_price_rupees ? parseInt(newBooking.final_price_rupees) * 100 : undefined;
               createMutation.mutate({
                 departure_id: newBooking.departure_id,
                 traveller_id: newBooking.traveller_id,
@@ -633,6 +467,460 @@ export default function BookingsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+/* ─── BookingDetailDialog ──────────────────────── */
+
+const TRAVELLER_DOC_TYPES = ['passport', 'id_card', 'photo', 'aadhaar', 'pan', 'driving_license', 'oci_card'];
+
+const DOC_STATUS_COLOR: Record<string, string> = {
+  pending: 'var(--crm-amber)', uploaded: 'var(--crm-blue)', verified: 'var(--crm-green)', rejected: 'var(--crm-red)',
+};
+
+function BookingDetailDialog({ booking, open, onOpenChange, onRecordPayment, onRequestDoc, onCancel, cancelling }: {
+  booking: Booking | null; open: boolean; onOpenChange: (v: boolean) => void;
+  onRecordPayment: () => void; onRequestDoc: () => void;
+  onCancel: (reason: string) => void; cancelling: boolean;
+}) {
+  const [cancelReason, setCancelReason] = useState('');
+  const [showCancel, setShowCancel] = useState(false);
+  const [detailTab, setDetailTab] = useState<'info' | 'payments' | 'documents' | 'checklist'>('info');
+  const [reassigning, setReassigning] = useState(false);
+  const queryClient = useQueryClient();
+
+  const { data: allTravellersData } = useQuery({
+    queryKey: ['travellers-for-reassign'],
+    queryFn: () => api.get<{ data: Traveller[] }>('/travellers?per_page=200'),
+    enabled: reassigning && open,
+  });
+
+  const { data: allGroupsData } = useQuery({
+    queryKey: ['groups-for-reassign'],
+    queryFn: () => api.get<{ data: Group[] }>('/groups'),
+    enabled: reassigning && open,
+  });
+
+  const reassignMutation = useMutation({
+    mutationFn: (body: { traveller_id?: string; group_id?: string | null }) =>
+      api.put(`/bookings/${booking!.id}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bookings'] });
+      setReassigning(false);
+      toast.success('Booking updated');
+    },
+  });
+
+  const { data: paymentsData } = useQuery({
+    queryKey: ['payments', booking?.id],
+    queryFn: () => api.get<APIResponse<Payment[]>>(`/bookings/${booking!.id}/payments`),
+    enabled: !!booking && open,
+  });
+
+  const { data: docsData } = useQuery({
+    queryKey: ['documents', booking?.id],
+    queryFn: () => api.get<APIResponse<BookingDocument[]>>(`/bookings/${booking!.id}/documents`),
+    enabled: !!booking && open,
+  });
+
+  const { data: checklistData } = useQuery({
+    queryKey: ['booking-checklist', booking?.departure_id, booking?.traveller_id],
+    queryFn: () => api.get<APIResponse<DepartureChecklistItem[]>>(`/departures/${booking!.departure_id}/checklist?traveller_id=${booking!.traveller_id}`),
+    enabled: !!booking && open,
+  });
+
+  const toggleChecklistMutation = useMutation({
+    mutationFn: ({ itemId, status }: { itemId: string; status: string }) =>
+      api.patch(`/departures/${booking!.departure_id}/checklist/items/${itemId}/status`, { status }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['booking-checklist', booking?.departure_id, booking?.traveller_id] });
+    },
+  });
+
+  const updateDocMutation = useMutation({
+    mutationFn: ({ docId, body }: { docId: string; body: Record<string, unknown> }) =>
+      api.patch<APIResponse<unknown>>(`/bookings/${booking!.id}/documents/${docId}`, body),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['documents', booking?.id] });
+    },
+  });
+
+  if (!booking) return null;
+
+  const payments = paymentsData?.data ?? [];
+  const documents = docsData?.data ?? [];
+  const checklistItems = checklistData?.data ?? [];
+  const totalPaid = payments.filter(p => p.status === 'completed').reduce((s, p) => s + p.amount_cents, 0);
+  const balance = (booking.final_price_cents || 0) - totalPaid;
+  const isCancelled = booking.status === 'cancelled';
+
+  const travellerDocs = documents.filter(d => TRAVELLER_DOC_TYPES.includes(d.document_type));
+  const tripDocs = documents.filter(d => !TRAVELLER_DOC_TYPES.includes(d.document_type));
+
+  const DETAIL_TABS = [
+    { key: 'info' as const, label: 'Info' },
+    { key: 'payments' as const, label: `Payments (${payments.length})` },
+    { key: 'documents' as const, label: `Documents (${documents.length})` },
+    { key: 'checklist' as const, label: `Checklist (${checklistItems.length})` },
+  ];
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent style={{ maxWidth: 780, width: '90vw', maxHeight: '90vh', display: 'flex', flexDirection: 'column' }}>
+        <DialogHeader>
+          <DialogTitle style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+            <span>{booking.traveller_name || 'Booking'}</span>
+            {booking.group_id && <Users size={14} style={{ color: 'var(--crm-accent)' }} />}
+            <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: (BOOKING_STATUSES[booking.status]?.color ?? 'gray') + '18', color: BOOKING_STATUSES[booking.status]?.color ?? 'gray' }}>
+              {BOOKING_STATUSES[booking.status]?.label ?? booking.status}
+            </span>
+            <span style={{ padding: '2px 8px', borderRadius: 10, fontSize: 11, fontWeight: 600, background: (PAYMENT_STATUSES[booking.payment_status]?.color ?? 'gray') + '18', color: PAYMENT_STATUSES[booking.payment_status]?.color ?? 'gray' }}>
+              {PAYMENT_STATUSES[booking.payment_status]?.label ?? booking.payment_status}
+            </span>
+          </DialogTitle>
+        </DialogHeader>
+
+        {/* Trip context */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '6px 12px', background: 'var(--crm-bg-2)', borderRadius: 8, marginBottom: 4, fontSize: 12 }}>
+          <div style={{ fontWeight: 600 }}>{booking.trip_name || 'Unknown Trip'}</div>
+          <div className="crm-dim">{formatDate(booking.departure_date)}</div>
+        </div>
+
+        {/* Share link bar */}
+        {booking.portal_token && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--crm-bg-2)', borderRadius: 8, marginBottom: 4, fontSize: 12 }}>
+            <Link2 size={14} style={{ color: 'var(--crm-accent)', flexShrink: 0 }} />
+            <code style={{ flex: 1, fontSize: 11, color: 'var(--crm-text-3)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {typeof window !== 'undefined' ? window.location.origin : ''}/b/{booking.portal_token}
+            </code>
+            <button
+              className="crm-btn primary sm"
+              style={{ fontSize: 11, height: 28, flexShrink: 0 }}
+              onClick={() => {
+                navigator.clipboard.writeText(`${window.location.origin}/b/${booking.portal_token}`);
+                toast.success('Trip link copied');
+              }}
+            >
+              Copy link
+            </button>
+          </div>
+        )}
+
+        {/* Sub-tabs */}
+        <div style={{ display: 'flex', gap: 0, borderBottom: '1px solid var(--crm-line)', marginBottom: 16 }}>
+          {DETAIL_TABS.map(t => (
+            <button
+              key={t.key}
+              onClick={() => setDetailTab(t.key)}
+              style={{
+                padding: '8px 16px', fontSize: 13, fontWeight: detailTab === t.key ? 600 : 400,
+                color: detailTab === t.key ? 'var(--crm-accent)' : 'var(--crm-text-3)',
+                borderBottom: detailTab === t.key ? '2px solid var(--crm-accent)' : '2px solid transparent',
+                background: 'none', border: 'none', cursor: 'pointer', marginBottom: -1,
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+        {/* === INFO TAB === */}
+        {detailTab === 'info' && (
+          <div style={{ fontSize: 13 }}>
+            <div style={{ display: 'flex', gap: 16, padding: '10px 14px', background: 'var(--crm-bg-2)', borderRadius: 8, marginBottom: 16, fontSize: 12, flexWrap: 'wrap' }}>
+              <div><span className="crm-caption">Total</span> <strong style={{ marginLeft: 4 }}>{formatPrice(booking.final_price_cents, booking.currency)}</strong></div>
+              <div><span className="crm-caption">Paid</span> <strong style={{ marginLeft: 4, color: 'var(--crm-green)' }}>{formatPrice(totalPaid, booking.currency)}</strong></div>
+              <div><span className="crm-caption">Due</span> <strong style={{ marginLeft: 4, color: balance > 0 ? 'var(--crm-amber)' : 'var(--crm-green)' }}>{formatPrice(Math.max(0, balance), booking.currency)}</strong></div>
+            </div>
+
+            {/* Mapped to */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: 'var(--crm-bg-2)', borderRadius: 8, marginBottom: 16, fontSize: 12 }}>
+              <div style={{ flex: 1 }}>
+                <span className="crm-caption">Traveller</span> <strong style={{ marginLeft: 4 }}>{booking.traveller_name || 'Unknown'}</strong>
+                {booking.group_id && <span style={{ marginLeft: 10 }}><span className="crm-caption">Group</span> <Users size={12} style={{ color: 'var(--crm-accent)', verticalAlign: '-2px', marginLeft: 4 }} /></span>}
+              </div>
+              {!isCancelled && !reassigning && (
+                <button className="crm-btn ghost sm" style={{ fontSize: 11 }} onClick={() => setReassigning(true)}>Change</button>
+              )}
+            </div>
+
+            {reassigning && (
+              <div style={{ padding: '12px 14px', background: 'var(--crm-bg-2)', borderRadius: 8, marginBottom: 16, fontSize: 13 }}>
+                <ReassignSection
+                  currentTravellerId={booking.traveller_id}
+                  currentGroupId={booking.group_id}
+                  travellers={allTravellersData?.data ?? []}
+                  groups={allGroupsData?.data ?? []}
+                  saving={reassignMutation.isPending}
+                  onSave={(t, g) => reassignMutation.mutate({ traveller_id: t || undefined, group_id: g || null })}
+                  onCancel={() => setReassigning(false)}
+                />
+              </div>
+            )}
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '12px 20px', marginBottom: 16 }}>
+              <div><div className="crm-caption" style={{ marginBottom: 2 }}>Room</div><div style={{ fontWeight: 500 }}>{booking.room_type_preference?.replace('_', ' ') || 'Not specified'}</div></div>
+              <div><div className="crm-caption" style={{ marginBottom: 2 }}>Booked</div><div style={{ fontWeight: 500 }}>{formatDate(booking.booking_date)}</div></div>
+              <div><div className="crm-caption" style={{ marginBottom: 2 }}>Source</div><div style={{ fontWeight: 500 }}>{booking.source || 'Direct'}</div></div>
+              {booking.emergency_contact_name && (
+                <div style={{ gridColumn: '1 / -1' }}><div className="crm-caption" style={{ marginBottom: 2 }}>Emergency Contact</div><div style={{ fontWeight: 500 }}>{booking.emergency_contact_name} ({booking.emergency_contact_relation}) &middot; {booking.emergency_contact_phone}</div></div>
+              )}
+              {booking.special_requests && (
+                <div style={{ gridColumn: '1 / -1' }}><div className="crm-caption" style={{ marginBottom: 2 }}>Special Requests</div><div style={{ fontWeight: 500 }}>{booking.special_requests}</div></div>
+              )}
+              {booking.internal_notes && (
+                <div style={{ gridColumn: '1 / -1' }}><div className="crm-caption" style={{ marginBottom: 2 }}>Internal Notes</div><div style={{ fontWeight: 500, fontStyle: 'italic', color: 'var(--crm-text-3)' }}>{booking.internal_notes}</div></div>
+              )}
+            </div>
+
+            {!isCancelled && (
+              <div style={{ borderTop: '1px solid var(--crm-line)', paddingTop: 12, marginTop: 8 }}>
+                {!showCancel ? (
+                  <button className="crm-btn ghost sm" style={{ color: 'var(--crm-pink)' }} onClick={() => setShowCancel(true)}>
+                    <XCircle size={13} /> Cancel Booking
+                  </button>
+                ) : (
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <input value={cancelReason} onChange={(e) => setCancelReason(e.target.value)}
+                      placeholder="Cancellation reason..."
+                      style={{ flex: 1, padding: '6px 10px', fontSize: 12, borderRadius: 6, border: '1px solid var(--crm-hairline)', background: 'var(--crm-bg)', color: 'var(--crm-text)' }} />
+                    <button className="crm-btn primary sm" style={{ background: 'var(--crm-pink)' }} onClick={() => onCancel(cancelReason)} disabled={cancelling}>
+                      {cancelling ? 'Cancelling...' : 'Confirm'}
+                    </button>
+                    <button className="crm-btn ghost sm" onClick={() => setShowCancel(false)}>Nevermind</button>
+                  </div>
+                )}
+              </div>
+            )}
+            {isCancelled && booking.cancellation_reason && (
+              <div style={{ padding: '8px 12px', background: 'rgba(244,63,94,0.08)', borderRadius: 6, fontSize: 12 }}>
+                <strong>Cancelled:</strong> {booking.cancellation_reason}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* === PAYMENTS TAB === */}
+        {detailTab === 'payments' && (
+          <div style={{ fontSize: 13 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <div style={{ display: 'flex', gap: 16, fontSize: 12 }}>
+                <div><span className="crm-caption">Total</span> <strong style={{ marginLeft: 4 }}>{formatPrice(booking.final_price_cents, booking.currency)}</strong></div>
+                <div><span className="crm-caption">Paid</span> <strong style={{ marginLeft: 4, color: 'var(--crm-green)' }}>{formatPrice(totalPaid, booking.currency)}</strong></div>
+                <div><span className="crm-caption">Due</span> <strong style={{ marginLeft: 4, color: balance > 0 ? 'var(--crm-amber)' : 'var(--crm-green)' }}>{formatPrice(Math.max(0, balance), booking.currency)}</strong></div>
+              </div>
+              {!isCancelled && (
+                <button className="crm-btn primary sm" onClick={onRecordPayment}><DollarSign size={12} /> Record Payment</button>
+              )}
+            </div>
+            {payments.length === 0 ? (
+              <div className="crm-caption" style={{ padding: '24px 0', textAlign: 'center' }}>No payments recorded yet</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {payments.map((p) => (
+                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: 'var(--crm-bg-2)', borderRadius: 8, fontSize: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      {p.status === 'completed' ? <CheckCircle2 size={15} style={{ color: 'var(--crm-green)' }} /> : <AlertCircle size={15} style={{ color: 'var(--crm-amber)' }} />}
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 14 }}>{formatPrice(p.amount_cents, p.currency)}</div>
+                        <div className="crm-caption">{p.type} &middot; {p.payment_method || 'N/A'}{p.reference_number ? ` &middot; ${p.reference_number}` : ''}</div>
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, fontWeight: 600, background: p.status === 'completed' ? 'var(--crm-green)18' : 'var(--crm-amber)18', color: p.status === 'completed' ? 'var(--crm-green)' : 'var(--crm-amber)' }}>{p.status}</span>
+                      {p.paid_date && <div className="crm-caption" style={{ marginTop: 2 }}>{formatDate(p.paid_date)}</div>}
+                      {!p.paid_date && p.scheduled_date && <div className="crm-caption" style={{ marginTop: 2 }}>Due {formatDate(p.scheduled_date)}</div>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* === DOCUMENTS TAB === */}
+        {detailTab === 'documents' && (
+          <div style={{ fontSize: 13 }}>
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>Traveller Documents</div>
+                  <div className="crm-caption">Permanent docs (passport, ID, etc.) — carried across trips</div>
+                </div>
+              </div>
+              {travellerDocs.length === 0 ? (
+                <div className="crm-caption" style={{ padding: '16px 0', textAlign: 'center' }}>No traveller documents</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {travellerDocs.map(doc => <DocRow key={doc.id} doc={doc} onUpdate={(body) => updateDocMutation.mutate({ docId: doc.id, body })} />)}
+                </div>
+              )}
+            </div>
+
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 14 }}>Trip Documents</div>
+                  <div className="crm-caption">Specific to this trip — insurance, visa, consent forms</div>
+                </div>
+                <button className="crm-btn sm" onClick={onRequestDoc}>
+                  <Plus size={12} /> Request Doc
+                </button>
+              </div>
+              {tripDocs.length === 0 ? (
+                <div className="crm-caption" style={{ padding: '16px 0', textAlign: 'center' }}>No trip documents requested</div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {tripDocs.map(doc => <DocRow key={doc.id} doc={doc} onUpdate={(body) => updateDocMutation.mutate({ docId: doc.id, body })} />)}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* === CHECKLIST TAB === */}
+        {detailTab === 'checklist' && (
+          <div style={{ fontSize: 13 }}>
+            {checklistItems.length === 0 ? (
+              <div className="crm-caption" style={{ padding: '24px 0', textAlign: 'center' }}>No checklist items for this traveller</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {checklistItems.map(item => {
+                  const isDone = item.status === 'completed' || item.status === 'skipped';
+                  return (
+                    <div key={item.id} style={{
+                      display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+                      background: 'var(--crm-bg-2)', borderRadius: 8,
+                      opacity: isDone ? 0.6 : 1,
+                    }}>
+                      <button
+                        style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, flexShrink: 0 }}
+                        onClick={() => toggleChecklistMutation.mutate({
+                          itemId: item.id,
+                          status: isDone ? 'pending' : 'completed',
+                        })}
+                      >
+                        {isDone
+                          ? <CheckCircle2 size={18} style={{ color: 'var(--crm-green)' }} />
+                          : <div style={{ width: 18, height: 18, borderRadius: '50%', border: '2px solid var(--crm-line)' }} />
+                        }
+                      </button>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 500, textDecoration: isDone ? 'line-through' : 'none' }}>{item.title}</div>
+                        {item.description && <div className="crm-caption">{item.description}</div>}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {item.is_required && <span style={{ padding: '1px 6px', borderRadius: 6, fontSize: 10, fontWeight: 600, background: 'var(--crm-red)18', color: 'var(--crm-red)' }}>Required</span>}
+                        {item.due_date && <span className="crm-caption">{formatDate(item.due_date)}</span>}
+                        {item.category && <span style={{ padding: '1px 6px', borderRadius: 6, fontSize: 10, fontWeight: 600, background: 'var(--crm-bg-active)', color: 'var(--crm-text-3)' }}>{item.category}</span>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/* ─── ReassignSection ────────────────────────── */
+
+function ReassignSection({ currentTravellerId, currentGroupId, travellers, groups, saving, onSave, onCancel }: {
+  currentTravellerId: string; currentGroupId?: string;
+  travellers: Traveller[]; groups: Group[];
+  saving: boolean; onSave: (travellerId: string, groupId: string) => void; onCancel: () => void;
+}) {
+  const [travellerId, setTravellerId] = useState(currentTravellerId);
+  const [groupId, setGroupId] = useState(currentGroupId || '');
+
+  return (
+    <div className="grid gap-3">
+      <div className="grid gap-1">
+        <label className="crm-caption">Traveller</label>
+        <EntitySearch
+          options={travellers.map(t => ({
+            id: t.id,
+            label: t.full_legal_name,
+            sublabel: [t.email, t.city].filter(Boolean).join(' · '),
+            initials: t.full_legal_name.split(' ').map(w => w[0]).join('').slice(0, 2),
+          }))}
+          value={travellerId}
+          onChange={setTravellerId}
+          placeholder="Search travellers…"
+          emptyMessage="No travellers"
+        />
+      </div>
+      <div className="grid gap-1">
+        <label className="crm-caption">Group (optional)</label>
+        <EntitySearch
+          options={[
+            { id: '__none__', label: 'No group', sublabel: 'Solo booking', initials: '–' },
+            ...groups.map(g => ({
+              id: g.id,
+              label: g.name,
+              sublabel: g.type,
+              initials: g.name.charAt(0),
+            })),
+          ]}
+          value={groupId || '__none__'}
+          onChange={(v) => setGroupId(v === '__none__' ? '' : v)}
+          placeholder="Search groups…"
+          emptyMessage="No groups"
+        />
+      </div>
+      <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        <button className="crm-btn ghost sm" onClick={onCancel}>Cancel</button>
+        <button className="crm-btn primary sm" onClick={() => onSave(travellerId, groupId)} disabled={saving || !travellerId}>
+          {saving ? 'Saving...' : 'Save'}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ─── DocRow ─────────────────────────────────── */
+
+function DocRow({ doc, onUpdate }: { doc: BookingDocument; onUpdate: (body: Record<string, unknown>) => void }) {
+  const statusColor = DOC_STATUS_COLOR[doc.status] || 'var(--crm-text-3)';
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+      background: 'var(--crm-bg-2)', borderRadius: 8, fontSize: 12,
+    }}>
+      <FileText size={16} style={{ color: 'var(--crm-text-3)', flexShrink: 0 }} />
+      <div style={{ flex: 1 }}>
+        <div style={{ fontWeight: 500, fontSize: 13 }}>{doc.label}</div>
+        <div className="crm-caption">{doc.document_type.replace(/_/g, ' ')}{doc.is_required ? ' · Required' : ''}</div>
+      </div>
+      <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 6, fontWeight: 600, background: statusColor + '18', color: statusColor }}>
+        {doc.status}
+      </span>
+      {doc.file_url && (
+        <a href={doc.file_url} target="_blank" rel="noopener noreferrer" className="crm-btn ghost sm" style={{ padding: '4px 6px' }}>
+          <Eye size={13} />
+        </a>
+      )}
+      {doc.status === 'uploaded' && (
+        <>
+          <button className="crm-btn ghost sm" style={{ padding: '4px 6px', color: 'var(--crm-green)' }}
+            onClick={() => onUpdate({ status: 'verified' })}>
+            <CheckCircle2 size={13} />
+          </button>
+          <button className="crm-btn ghost sm" style={{ padding: '4px 6px', color: 'var(--crm-red)' }}
+            onClick={() => {
+              const reason = prompt('Rejection reason:');
+              if (reason) onUpdate({ status: 'rejected', rejection_reason: reason });
+            }}>
+            <XCircle size={13} />
+          </button>
+        </>
+      )}
     </div>
   );
 }

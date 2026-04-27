@@ -142,8 +142,8 @@ export default function OnboardingPage() {
         const formData = new FormData();
         formData.append('file', logoFile);
         formData.append('category', 'org-logo');
-        const uploadRes = await api.upload<{ data: { url: string } }>('/upload', formData);
-        logoUrl = uploadRes.data.url;
+        const uploadRes = await api.upload<{ data: { public_url: string } }>('/upload', formData);
+        logoUrl = uploadRes.data.public_url;
       }
       await api.put('/org/settings', {
         slug,
@@ -187,9 +187,16 @@ export default function OnboardingPage() {
     setSaving(true);
     setError('');
     try {
+      const name = tripName.trim();
+      const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+      const destinationsArr = destinations
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
       await api.post('/trips', {
-        name: tripName.trim(),
-        destinations: destinations.trim(),
+        name,
+        slug,
+        destinations: destinationsArr,
         duration_days: durationDays ? parseInt(durationDays, 10) : undefined,
       });
       router.push('/dashboard');
@@ -237,7 +244,7 @@ export default function OnboardingPage() {
               margin: '0 auto 16px',
             }}
           >
-            BP
+            T
           </div>
           <div style={{ fontSize: 13, color: 'var(--crm-text-3)', marginBottom: 8 }}>
             Step {step} of 3

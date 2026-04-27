@@ -1,16 +1,34 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { listTemplates } from '@/lib/templates';
+import { api } from '@/lib/api';
+import type { APIResponse } from '@/types/api';
 import { Globe, ExternalLink, Eye, Check, Palette, Layout, Sparkles } from 'lucide-react';
 
-const templates = listTemplates();
+const allTemplates = listTemplates();
 
 const CATEGORY_ICONS: Record<string, typeof Globe> = {
   'Travel & Tourism': Globe,
 };
 
 export default function WebsitePage() {
+  // === wave-4 template gating (Agent H) ===
+  // Fetch the list of gated template ids granted to this org. The endpoint
+  // returns only ids — we cross-reference with the local registry to filter
+  // the gallery so users never see gated templates they can't pick.
+  const { data: grantedResp } = useQuery({
+    queryKey: ['website-granted-templates'],
+    queryFn: () => api.get<APIResponse<string[]>>('/website/templates/granted'),
+  });
+  const granted = grantedResp?.data ?? [];
+  const templates = useMemo(
+    () => allTemplates.filter((t) => !t.requires_grant || granted.includes(t.id)),
+    [granted]
+  );
+  // === end Agent H ===
+
   const [selected, setSelected] = useState<string | null>(templates[0]?.id ?? null);
   const current = templates.find((t) => t.id === selected);
 

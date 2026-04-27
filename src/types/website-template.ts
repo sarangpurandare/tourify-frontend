@@ -174,6 +174,36 @@ export interface SiteConfig {
   };
 
   images: Record<string, string>;
+
+  seo: {
+    title: string;
+    description: string;
+    keywords: string[];
+    ogImage?: string;
+    ogType: string;
+    canonicalUrl?: string;
+    robots: string;
+    locale: string;
+    structuredData?: {
+      type: string;
+      name: string;
+      description: string;
+      url?: string;
+      logo?: string;
+      address?: { street: string; city: string; region: string; postalCode: string; country: string };
+      phone?: string;
+      priceRange?: string;
+      sameAs?: string[];
+    };
+  };
+
+  domain?: {
+    customDomain?: string;
+    sslEnabled: boolean;
+    verified: boolean;
+    verificationToken?: string;
+    dnsRecords?: { type: string; name: string; value: string; status: 'pending' | 'verified' | 'error' }[];
+  };
 }
 
 export interface TemplateInfo {
@@ -183,6 +213,16 @@ export interface TemplateInfo {
   thumbnail: string;
   category: string;
   tags: string[];
+  /**
+   * When true, this template is gated and only visible to organisations
+   * that have been explicitly granted access via the platform-admin
+   * /admin/templates page. Defaults to false (template available to all).
+   *
+   * IMPORTANT: keep this in sync with the canonical list in
+   * `backend/internal/plan/templates.go` (`GatedTemplates`). The backend
+   * relies on its own list to enforce the gate on PUT /api/v1/website/config.
+   */
+  requires_grant?: boolean;
 }
 
 export interface WebsiteTemplate extends TemplateInfo {

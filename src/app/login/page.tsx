@@ -1,36 +1,34 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { Building2, ArrowRight } from 'lucide-react';
+import { useState, useEffect, useRef, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth';
 
-const DEV_BYPASS = process.env.NEXT_PUBLIC_DEV_AUTH_BYPASS === 'true';
-
-interface DevOrg {
-  id: string;
-  name: string;
-  slug: string;
-  logo_url: string | null;
-}
-
-function DevOrgPicker() {
-  const [orgs, setOrgs] = useState<DevOrg[]>([]);
-  const [loading, setLoading] = useState(true);
+function ImpersonationConsumer({ token }: { token: string }) {
+  const { loginAsImpersonator } = useAuth();
   const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  // Single-use tokens get marked consumed on the backend on first call.
+  // React Strict Mode double-invokes effects in dev — without this ref the
+  // second invocation hits 410 TOKEN_CONSUMED and surfaces the error to the
+  // user even though the first call succeeded.
+  const startedRef = useRef(false);
 
   useEffect(() => {
-    supabase
-      .from('organisations')
-      .select('id, name, slug, logo_url')
-      .eq('is_active', true)
-      .order('name')
-      .then(({ data, error }) => {
-        if (!error && data) setOrgs(data as DevOrg[]);
-        setLoading(false);
-      });
-  }, []);
+    if (startedRef.current) return;
+    startedRef.current = true;
+    (async () => {
+      try {
+        await loginAsImpersonator(token);
+        // replace() so the JWT param doesn't linger in browser history.
+        router.replace('/dashboard');
+      } catch (e) {
+        setError(e instanceof Error ? e.message : 'Impersonation token invalid or expired.');
+      }
+    })();
+  }, [token, loginAsImpersonator, router]);
 
   return (
     <div
@@ -44,85 +42,51 @@ function DevOrgPicker() {
         padding: 24,
       }}
     >
-      <div style={{ width: '100%', maxWidth: 440 }}>
-        <div style={{ textAlign: 'center', marginBottom: 32 }}>
-          <div
-            style={{
-              width: 48,
-              height: 48,
-              borderRadius: 12,
-              background: 'linear-gradient(135deg, var(--crm-accent) 0%, color-mix(in oklab, var(--crm-accent) 70%, #000) 100%)',
-              display: 'grid',
-              placeItems: 'center',
-              color: '#fff',
-              fontWeight: 700,
-              fontSize: 18,
-              margin: '0 auto 16px',
-            }}
-          >
-            BP
-          </div>
-          <h1 className="crm-title-1" style={{ marginBottom: 6 }}>Dev Mode</h1>
-          <p className="crm-caption" style={{ fontSize: 14 }}>Select an organisation</p>
-        </div>
-
-        {loading ? (
-          <div style={{ textAlign: 'center', color: 'var(--crm-text-3)', fontSize: 13, padding: 40 }}>
-            Loading organisations...
-          </div>
-        ) : orgs.length === 0 ? (
-          <div className="crm-card" style={{ padding: 32, textAlign: 'center', color: 'var(--crm-text-3)' }}>
-            <Building2 size={24} style={{ margin: '0 auto 8px' }} />
-            <div style={{ fontSize: 14 }}>No organisations found</div>
-            <div style={{ fontSize: 12, marginTop: 4 }}>Check your database connection</div>
-          </div>
+      <div className="crm-card" style={{ width: '100%', maxWidth: 400, padding: '40px 32px', textAlign: 'center' }}>
+        {error ? (
+          <>
+            <div
+              style={{
+                padding: '10px 14px',
+                fontSize: 13,
+                color: 'var(--crm-red)',
+                background: 'var(--crm-red-bg)',
+                borderRadius: 'var(--crm-radius-sm)',
+                marginBottom: 16,
+              }}
+            >
+              Impersonation token invalid or expired.
+            </div>
+            <div className="crm-caption" style={{ marginBottom: 16, fontSize: 12 }}>{error}</div>
+            <Link
+              href="/login"
+              className="crm-btn"
+              style={{
+                display: 'inline-flex',
+                justifyContent: 'center',
+                textDecoration: 'none',
+              }}
+            >
+              Back to login
+            </Link>
+          </>
         ) : (
-          <div className="crm-card" style={{ overflow: 'hidden' }}>
-            {orgs.map((org, i) => (
-              <button
-                key={org.id}
-                onClick={() => router.push(`/login/${org.slug}`)}
-                style={{
-                  width: '100%',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 12,
-                  padding: '14px 16px',
-                  background: 'transparent',
-                  border: 'none',
-                  borderTop: i > 0 ? '1px solid var(--crm-line)' : 'none',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                  fontFamily: 'var(--font-sans)',
-                  transition: 'background 0.15s',
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--crm-bg-hover)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
-              >
-                <div
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 10,
-                    background: 'var(--crm-bg-active)',
-                    display: 'grid',
-                    placeItems: 'center',
-                    fontSize: 14,
-                    fontWeight: 700,
-                    color: 'var(--crm-text-2)',
-                    flexShrink: 0,
-                  }}
-                >
-                  {org.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--crm-text)' }}>{org.name}</div>
-                  <div style={{ fontSize: 12, color: 'var(--crm-text-3)' }}>{org.slug}</div>
-                </div>
-                <ArrowRight size={16} style={{ color: 'var(--crm-text-3)' }} />
-              </button>
-            ))}
-          </div>
+          <>
+            <div
+              style={{
+                width: 32,
+                height: 32,
+                border: '2px solid var(--crm-line)',
+                borderTopColor: 'var(--crm-accent)',
+                borderRadius: '50%',
+                animation: 'spin 0.8s linear infinite',
+                margin: '0 auto 12px',
+              }}
+            />
+            <div className="crm-caption" style={{ fontSize: 13 }}>
+              Authorizing impersonation session…
+            </div>
+          </>
         )}
       </div>
     </div>
@@ -188,9 +152,9 @@ function ProdOrgEntry() {
               letterSpacing: '0.02em',
             }}
           >
-            BP
+            T
           </div>
-          <h1 className="crm-title-1" style={{ marginBottom: 6 }}>Boarding Pass</h1>
+          <h1 className="crm-title-1" style={{ marginBottom: 6 }}>Tourify</h1>
           <p className="crm-caption" style={{ fontSize: 14 }}>Enter your organisation</p>
         </div>
 
@@ -252,6 +216,37 @@ function ProdOrgEntry() {
   );
 }
 
+function LoginPageInner() {
+  const searchParams = useSearchParams();
+  const impersonateToken = searchParams.get('impersonate');
+
+  if (impersonateToken) {
+    return <ImpersonationConsumer token={impersonateToken} />;
+  }
+
+  return <ProdOrgEntry />;
+}
+
 export default function LoginPage() {
-  return DEV_BYPASS ? <DevOrgPicker /> : <ProdOrgEntry />;
+  return (
+    <Suspense
+      fallback={
+        <div
+          style={{
+            minHeight: '100vh',
+            display: 'grid',
+            placeItems: 'center',
+            background: 'var(--crm-bg-canvas)',
+            color: 'var(--crm-text-3)',
+            fontFamily: 'var(--font-sans)',
+            fontSize: 13,
+          }}
+        >
+          Loading…
+        </div>
+      }
+    >
+      <LoginPageInner />
+    </Suspense>
+  );
 }

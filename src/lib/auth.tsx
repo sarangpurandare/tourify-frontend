@@ -22,57 +22,89 @@ interface SignupResponse {
   };
 }
 
+interface ConsumeImpersonationResponse {
+  data: {
+    access_token: string;
+    refresh_token: string;
+  };
+}
+
+export interface PlanFeatures {
+  staff: number;
+  travellers: number;
+  trips: number;
+  departures_per_month: number;
+  storage_bytes: number;
+  ai_credits_per_month: number;
+  api_access: boolean;
+  traveller_portal: boolean;
+  reviews: boolean;
+  website_builder: boolean;
+}
+
+export interface ImpersonationState {
+  active: boolean;
+}
+
 interface AuthContextType {
   session: Session | null;
   user: StaffUser | null;
   plan: string | null;
+  features: PlanFeatures | null;
   loading: boolean;
+  impersonating: ImpersonationState | null;
   login: (email: string, password: string) => Promise<void>;
-  loginAsDev: (staffId: string) => Promise<void>;
   signup: (payload: SignupPayload) => Promise<void>;
   loginWithTokens: (accessToken: string, refreshToken: string) => Promise<void>;
+  loginAsImpersonator: (jwt: string) => Promise<void>;
+  exitImpersonation: () => void;
   logout: () => Promise<void>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const DEV_BYPASS = process.env.NEXT_PUBLIC_DEV_AUTH_BYPASS === 'true';
-
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
+
+const IMPERSONATION_TOKEN_KEY = 'tourify_imp_token';
+const IMPERSONATION_FLAG_KEY = 'tourify_imp_active';
+
+function isImpersonationActive(): boolean {
+  if (typeof window === 'undefined') return false;
+  return sessionStorage.getItem(IMPERSONATION_FLAG_KEY) === 'true';
+}
+
+function getImpersonationToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  return sessionStorage.getItem(IMPERSONATION_TOKEN_KEY);
+}
+
+function setImpersonationSession(token: string) {
+  sessionStorage.setItem(IMPERSONATION_TOKEN_KEY, token);
+  sessionStorage.setItem(IMPERSONATION_FLAG_KEY, 'true');
+}
+
+function clearImpersonationSession() {
+  sessionStorage.removeItem(IMPERSONATION_TOKEN_KEY);
+  sessionStorage.removeItem(IMPERSONATION_FLAG_KEY);
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<StaffUser | null>(null);
   const [plan, setPlan] = useState<string | null>(null);
+  const [features, setFeatures] = useState<PlanFeatures | null>(null);
   const [loading, setLoading] = useState(true);
+  const [impersonating, setImpersonating] = useState<ImpersonationState | null>(
+    () => (typeof window !== 'undefined' && isImpersonationActive()) ? { active: true } : null,
+  );
 
   const fetchStaffUser = useCallback(async () => {
     try {
-      if (DEV_BYPASS) {
-        const staffId = localStorage.getItem('dev_staff_id');
-        if (!staffId) { setUser(null); setLoading(false); return; }
-        const { data } = await supabase
-          .from('staff_users')
-          .select('id, supabase_auth_id, organisation_id, name, email, phone, role, is_active, created_at, updated_at, organisations(name, plan)')
-          .eq('id', staffId)
-          .eq('is_active', true)
-          .single();
-        if (data) {
-          const org = data.organisations as unknown as { name: string; plan?: string } | null;
-          setUser({
-            ...data,
-            organisation_name: org?.name,
-          } as unknown as StaffUser);
-          setPlan(org?.plan ?? 'free');
-        } else {
-          localStorage.removeItem('dev_staff_id');
-          setUser(null);
-        }
-      } else {
-        const res = await api.get<APIResponse<StaffUser & { plan?: string }>>('/auth/me');
-        setUser(res.data);
-        setPlan(res.data.plan ?? 'free');
-      }
+      const res = await api.get<APIResponse<StaffUser & { plan?: string; features?: PlanFeatures }>>('/auth/me');
+      setUser(res.data);
+      setPlan(res.data.plan ?? 'free');
+      setFeatures(res.data.features ?? null);
     } catch {
       setUser(null);
     } finally {
@@ -81,13 +113,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (DEV_BYPASS) {
-      const savedId = localStorage.getItem('dev_staff_id');
-      if (savedId) {
-        fetchStaffUser();
-      } else {
-        setLoading(false);
-      }
+    if (isImpersonationActive()) {
+      setImpersonating({ active: true });
+      fetchStaffUser();
       return;
     }
 
@@ -103,6 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       if (session) {
+        setLoading(true);
         fetchStaffUser();
       } else {
         setUser(null);
@@ -114,15 +143,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [fetchStaffUser]);
 
   async function login(email: string, password: string) {
-    if (DEV_BYPASS) return;
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw error;
-  }
-
-  async function loginAsDev(staffId: string) {
-    localStorage.setItem('dev_staff_id', staffId);
     setLoading(true);
-    await fetchStaffUser();
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+    } catch (e) {
+      setLoading(false);
+      throw e;
+    }
   }
 
   async function signup(payload: SignupPayload) {
@@ -154,21 +182,79 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await fetchStaffUser();
   }
 
+  async function loginAsImpersonator(jwt: string) {
+    setLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/auth/consume-impersonation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jwt }),
+      });
+      if (!response.ok) {
+        const err = await response
+          .json()
+          .catch(() => ({ error: { message: 'Impersonation token invalid or expired' } }));
+        throw new Error(err.error?.message || 'Impersonation token invalid or expired');
+      }
+      const result: ConsumeImpersonationResponse = await response.json();
+      const accessToken = result.data.access_token;
+      if (!accessToken) {
+        throw new Error('Impersonation response missing access_token');
+      }
+      setImpersonationSession(accessToken);
+      setImpersonating({ active: true });
+      setSession(null);
+      await fetchStaffUser();
+    } catch (e) {
+      setLoading(false);
+      throw e;
+    }
+  }
+
+  function exitImpersonation() {
+    clearImpersonationSession();
+    setImpersonating(null);
+    setUser(null);
+    setSession(null);
+    setPlan(null);
+    setFeatures(null);
+    // Hard navigate to clear in-memory caches. Do NOT call
+    // supabase.auth.signOut() — the admin's Supabase session
+    // in another tab must stay intact.
+    window.location.href = '/login';
+  }
+
   async function logout() {
-    if (DEV_BYPASS) {
-      localStorage.removeItem('dev_staff_id');
-      setUser(null);
-      setPlan(null);
+    if (isImpersonationActive()) {
+      exitImpersonation();
       return;
     }
     await supabase.auth.signOut();
     setUser(null);
     setSession(null);
     setPlan(null);
+    setFeatures(null);
+    setImpersonating(null);
   }
 
   return (
-    <AuthContext.Provider value={{ session, user, plan, loading, login, loginAsDev, signup, loginWithTokens, logout }}>
+    <AuthContext.Provider
+      value={{
+        session,
+        user,
+        plan,
+        features,
+        loading,
+        impersonating,
+        login,
+        signup,
+        loginWithTokens,
+        loginAsImpersonator,
+        exitImpersonation,
+        logout,
+        refreshUser: fetchStaffUser,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

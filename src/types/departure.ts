@@ -30,6 +30,14 @@ export interface Departure {
   live_status: string;
   current_day?: number;
   trip_name?: string;
+  trip_type?: string;
+  client_name?: string;
+  client_email?: string;
+  client_phone?: string;
+  quote_status: string;
+  quote_valid_until?: string;
+  quote_notes?: string;
+  share_token?: string;
   confirmed_count: number;
   waitlist_count: number;
   spots_remaining: number;

@@ -126,7 +126,7 @@ export default function InviteAcceptPage({ params }: { params: Promise<{ token: 
               margin: '0 auto 16px',
             }}
           >
-            BP
+            T
           </div>
         </div>
 

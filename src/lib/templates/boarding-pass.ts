@@ -284,6 +284,49 @@ export const defaults: SiteConfig = {
   },
 
   images: IMG,
+
+  seo: {
+    title: "Boarding Pass Tours — Where Every Stamp Tells A Story",
+    description:
+      "Small-group travel experiences curated by Boarding Pass Tours. Unforgettable journeys with expert guides, handpicked groups of 10-20 travellers, and destinations that go beyond the obvious.",
+    keywords: [
+      "small group tours",
+      "travel experiences",
+      "Boarding Pass Tours",
+      "international tours",
+      "curated travel",
+      "Mumbai travel company",
+    ],
+    ogType: "website",
+    robots: "index, follow",
+    locale: "en_IN",
+    structuredData: {
+      type: "TravelAgency",
+      name: "Boarding Pass Tours",
+      description:
+        "Small-group travel experiences curated by Boarding Pass Tours. Unforgettable journeys with expert guides.",
+      url: "https://www.boardingpasstours.com",
+      phone: "+919600587100",
+      priceRange: "$$",
+      address: {
+        street: "41, Shree Dhanalaxmi CHS, Taikalwadi, Mahim",
+        city: "Mumbai",
+        region: "Maharashtra",
+        postalCode: "400016",
+        country: "IN",
+      },
+      sameAs: [
+        "https://instagram.com/boardingpass.tours",
+        "https://facebook.com/boardingpasstour",
+        "https://linkedin.com/company/boardingpass-tours",
+      ],
+    },
+  },
+
+  domain: {
+    sslEnabled: true,
+    verified: false,
+  },
 };
 
 export const boardingPassTemplate: WebsiteTemplate = {

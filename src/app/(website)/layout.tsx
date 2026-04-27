@@ -1,25 +1,4 @@
-import type { Metadata } from "next";
 import "./website.css";
-
-export const metadata: Metadata = {
-  title: "Boarding Pass Tours — Where Every Stamp Tells A Story",
-  description:
-    "Small-group travel experiences curated by Boarding Pass Tours. Unforgettable journeys with expert guides, handpicked groups of 10-20 travellers, and destinations that go beyond the obvious.",
-  keywords: [
-    "small group tours",
-    "travel experiences",
-    "Boarding Pass Tours",
-    "international tours",
-    "curated travel",
-    "Mumbai travel company",
-  ],
-  openGraph: {
-    title: "Boarding Pass Tours — Where Every Stamp Tells A Story",
-    description:
-      "Small-group travel experiences with expert guides. Never more than 20 travellers.",
-    type: "website",
-  },
-};
 
 export default function WebsiteLayout({
   children,

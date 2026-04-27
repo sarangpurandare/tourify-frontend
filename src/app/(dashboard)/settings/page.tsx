@@ -14,12 +14,50 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import {
-  Upload, X, Copy, Check, AlertTriangle, Key, Users,
+  Upload, X, Copy, Check, AlertTriangle, Key, Users, Sparkles,
+  Globe,
 } from 'lucide-react';
 
 /* ─── Types ────────────────────────────────────── */
 
-interface OrgSettings {
+interface WebsiteSettings {
+  ga4_id: string;
+  meta_pixel_id: string;
+  gtm_id: string;
+  custom_head_scripts: string;
+  custom_body_scripts: string;
+  seo_title: string;
+  seo_description: string;
+  og_image_url: string;
+  privacy_policy_url: string;
+  terms_url: string;
+  cookie_consent_enabled: boolean;
+  business_name: string;
+  gst_number: string;
+  business_address: string;
+  support_email: string;
+  support_phone: string;
+  whatsapp_number: string;
+  social_instagram: string;
+  social_facebook: string;
+  social_youtube: string;
+  social_twitter: string;
+  social_linkedin: string;
+  custom_domain: string;
+}
+
+const EMPTY_WEBSITE_SETTINGS: WebsiteSettings = {
+  ga4_id: '', meta_pixel_id: '', gtm_id: '',
+  custom_head_scripts: '', custom_body_scripts: '',
+  seo_title: '', seo_description: '', og_image_url: '',
+  privacy_policy_url: '', terms_url: '', cookie_consent_enabled: false,
+  business_name: '', gst_number: '', business_address: '',
+  support_email: '', support_phone: '', whatsapp_number: '',
+  social_instagram: '', social_facebook: '', social_youtube: '',
+  social_twitter: '', social_linkedin: '', custom_domain: '',
+};
+
+interface OrgData {
   id: string;
   name: string;
   slug: string;
@@ -27,6 +65,12 @@ interface OrgSettings {
   timezone: string;
   default_currency: string;
   plan: string;
+  website_settings?: WebsiteSettings;
+}
+
+interface OrgSettings {
+  org: OrgData;
+  usage?: OrgUsage;
 }
 
 interface OrgUsage {
@@ -75,6 +119,20 @@ interface ApiKeyCreateResponse {
   key_prefix: string;
 }
 
+interface CategoryUsage {
+  request_count: number;
+  tokens_used: number;
+  credits: number;
+}
+
+interface AIUsageSummary {
+  month: string;
+  total_credits: number;
+  monthly_limit: number;
+  usage_percent: number;
+  by_category: Record<string, CategoryUsage>;
+}
+
 /* ─── Constants ────────────────────────────────── */
 
 const TIMEZONES = [
@@ -93,7 +151,15 @@ const PLAN_LABELS: Record<string, string> = {
   business: 'Business',
 };
 
-const TABS = ['General', 'Team', 'Billing', 'API Keys'] as const;
+const TABS = ['General', 'Website', 'Team', 'Billing', 'API Keys'] as const;
+
+const AI_CATEGORIES = [
+  { key: 'blog', label: 'Blog creation' },
+  { key: 'bulk_upload', label: 'Bulk upload' },
+  { key: 'summarisation', label: 'Summarisation' },
+  { key: 'image_processing', label: 'Image processing' },
+  { key: 'image_generation', label: 'Image generation' },
+];
 
 /* ─── Styles ───────────────────────────────────── */
 
@@ -155,12 +221,12 @@ function timeAgo(d: string) {
 /* ─── Component ────────────────────────────────── */
 
 export default function SettingsPage() {
-  const { user, plan } = useAuth();
+  const { user, features, refreshUser } = useAuth();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<string>('General');
 
   const isOwnerOrAdmin = user?.role === 'owner' || user?.role === 'admin';
-  const isPlanWithAPI = plan === 'pro' || plan === 'business';
+  const isPlanWithAPI = features?.api_access ?? false;
 
   // ─── General tab state ──────────────────────
   const [orgName, setOrgName] = useState('');
@@ -174,6 +240,12 @@ export default function SettingsPage() {
   const [generalSuccess, setGeneralSuccess] = useState(false);
   const [generalError, setGeneralError] = useState('');
 
+  // ─── Website tab state ──────────────────────
+  const [ws, setWs] = useState<WebsiteSettings>(EMPTY_WEBSITE_SETTINGS);
+  const [wsSaving, setWsSaving] = useState(false);
+  const [wsSuccess, setWsSuccess] = useState(false);
+  const [wsError, setWsError] = useState('');
+
   // ─── Team tab state ─────────────────────────
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -186,6 +258,12 @@ export default function SettingsPage() {
   const [keyCopied, setKeyCopied] = useState(false);
   const [revokeConfirm, setRevokeConfirm] = useState<string | null>(null);
 
+  // ─── Billing tab state ──────────────────────
+  const [upgradeOpen, setUpgradeOpen] = useState(false);
+  const [upgradeTargetPlan, setUpgradeTargetPlan] = useState<string>('');
+  const [upgradeMessage, setUpgradeMessage] = useState('');
+  const [upgradeSuccess, setUpgradeSuccess] = useState(false);
+
   // ─── Queries ────────────────────────────────
   const { data: settingsData } = useQuery({
     queryKey: ['org-settings'],
@@ -196,6 +274,12 @@ export default function SettingsPage() {
   const { data: billingData } = useQuery({
     queryKey: ['billing-status'],
     queryFn: () => api.get<APIResponse<BillingStatus>>('/billing/status'),
+    enabled: isOwnerOrAdmin && activeTab === 'Billing',
+  });
+
+  const { data: aiUsageData } = useQuery({
+    queryKey: ['ai-usage'],
+    queryFn: () => api.get<APIResponse<AIUsageSummary>>('/ai/usage'),
     enabled: isOwnerOrAdmin && activeTab === 'Billing',
   });
 
@@ -219,13 +303,16 @@ export default function SettingsPage() {
 
   // Load settings into form
   useEffect(() => {
-    if (settingsData?.data) {
-      const s = settingsData.data;
+    if (settingsData?.data?.org) {
+      const s = settingsData.data.org;
       setOrgName(s.name);
       setSlug(s.slug);
       setTimezone(s.timezone || 'Asia/Kolkata');
       setCurrency(s.default_currency || 'INR');
       setLogoUrl(s.logo_url);
+      if (s.website_settings) {
+        setWs({ ...EMPTY_WEBSITE_SETTINGS, ...s.website_settings });
+      }
     }
   }, [settingsData]);
 
@@ -239,16 +326,25 @@ export default function SettingsPage() {
       setInviteEmail('');
       setInviteRole('viewer');
     },
+    onError: (err: Error) => {
+      alert(err.message || 'Something went wrong');
+    },
   });
 
   const revokeInviteMutation = useMutation({
     mutationFn: (id: string) => api.delete(`/invitations/${id}`),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['invitations'] }),
+    onError: (err: Error) => {
+      alert(err.message || 'Something went wrong');
+    },
   });
 
   const deactivateStaffMutation = useMutation({
     mutationFn: (id: string) => api.put(`/staff/${id}`, { is_active: false }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['staff'] }),
+    onError: (err: Error) => {
+      alert(err.message || 'Something went wrong');
+    },
   });
 
   const createKeyMutation = useMutation({
@@ -258,6 +354,9 @@ export default function SettingsPage() {
       setNewKeyName('');
       queryClient.invalidateQueries({ queryKey: ['api-keys'] });
     },
+    onError: (err: Error) => {
+      alert(err.message || 'Something went wrong');
+    },
   });
 
   const revokeKeyMutation = useMutation({
@@ -265,6 +364,26 @@ export default function SettingsPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['api-keys'] });
       setRevokeConfirm(null);
+    },
+    onError: (err: Error) => {
+      alert(err.message || 'Something went wrong');
+    },
+  });
+
+  const requestUpgradeMutation = useMutation({
+    mutationFn: (body: { target_plan: string; message: string }) =>
+      api.post('/billing/request-upgrade', body),
+    onSuccess: () => {
+      setUpgradeSuccess(true);
+      setUpgradeMessage('');
+      setUpgradeTargetPlan('');
+      setTimeout(() => {
+        setUpgradeOpen(false);
+        setUpgradeSuccess(false);
+      }, 1800);
+    },
+    onError: (err: Error) => {
+      alert(err.message || 'Failed to send upgrade request');
     },
   });
 
@@ -290,8 +409,8 @@ export default function SettingsPage() {
         const formData = new FormData();
         formData.append('file', logoFile);
         formData.append('category', 'org-logo');
-        const uploadRes = await api.upload<{ data: { url: string } }>('/upload', formData);
-        newLogoUrl = uploadRes.data.url;
+        const uploadRes = await api.upload<{ data: { public_url: string } }>('/upload', formData);
+        newLogoUrl = uploadRes.data.public_url;
       }
       await api.put('/org/settings', {
         name: orgName,
@@ -301,8 +420,10 @@ export default function SettingsPage() {
       });
       setLogoFile(null);
       setLogoPreview(null);
+      setLogoUrl(newLogoUrl);
       setGeneralSuccess(true);
       queryClient.invalidateQueries({ queryKey: ['org-settings'] });
+      await refreshUser();
       setTimeout(() => setGeneralSuccess(false), 3000);
     } catch (err: unknown) {
       setGeneralError(err instanceof Error ? err.message : 'Failed to save');
@@ -319,6 +440,26 @@ export default function SettingsPage() {
     }
   }
 
+  async function saveWebsiteSettings() {
+    setWsSaving(true);
+    setWsError('');
+    setWsSuccess(false);
+    try {
+      await api.put('/org/settings', { website_settings: ws });
+      setWsSuccess(true);
+      queryClient.invalidateQueries({ queryKey: ['org-settings'] });
+      setTimeout(() => setWsSuccess(false), 3000);
+    } catch (err: unknown) {
+      setWsError(err instanceof Error ? err.message : 'Failed to save');
+    } finally {
+      setWsSaving(false);
+    }
+  }
+
+  function updateWs<K extends keyof WebsiteSettings>(key: K, value: WebsiteSettings[K]) {
+    setWs(prev => ({ ...prev, [key]: value }));
+  }
+
   if (!isOwnerOrAdmin) {
     return (
       <div style={{ padding: 40, textAlign: 'center' }}>
@@ -327,8 +468,9 @@ export default function SettingsPage() {
     );
   }
 
-  const settings = settingsData?.data;
+  const settings = settingsData?.data?.org;
   const billing = billingData?.data;
+  const aiUsage = aiUsageData?.data;
   const staffList = staffData?.data ?? [];
   const pendingInvites = (invitationsData?.data ?? []).filter((inv) => !inv.accepted_at);
   const apiKeys = apiKeysData?.data ?? [];
@@ -497,6 +639,93 @@ export default function SettingsPage() {
           </div>
         )}
 
+        {/* ═══ WEBSITE TAB ═══ */}
+        {activeTab === 'Website' && (
+          <div style={{ maxWidth: 640 }}>
+            {wsError && (
+              <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--crm-red)', background: 'var(--crm-red-bg)', borderRadius: 'var(--crm-radius-sm)', marginBottom: 20 }}>
+                {wsError}
+              </div>
+            )}
+            {wsSuccess && (
+              <div style={{ padding: '10px 14px', fontSize: 13, color: 'var(--crm-green)', background: 'var(--crm-green-bg, rgba(34,197,94,0.1))', borderRadius: 'var(--crm-radius-sm)', marginBottom: 20 }}>
+                Website settings saved
+              </div>
+            )}
+
+            {/* ─── Tracking & Analytics ─── */}
+            <WsSection title="Tracking & Analytics" icon={<Globe size={16} />}>
+              <WsField label="Google Analytics (GA4)" placeholder="G-XXXXXXXXXX" value={ws.ga4_id} onChange={v => updateWs('ga4_id', v)} />
+              <WsField label="Meta / Facebook Pixel ID" placeholder="1234567890" value={ws.meta_pixel_id} onChange={v => updateWs('meta_pixel_id', v)} />
+              <WsField label="Google Tag Manager" placeholder="GTM-XXXXXXX" value={ws.gtm_id} onChange={v => updateWs('gtm_id', v)} />
+            </WsSection>
+
+            {/* ─── Custom Scripts ─── */}
+            <WsSection title="Custom Scripts" subtitle="For chat widgets (Tawk.to, Intercom), CRM pixels, etc.">
+              <WsTextarea label="Head scripts" placeholder="<script>...</script>" value={ws.custom_head_scripts} onChange={v => updateWs('custom_head_scripts', v)} rows={4} />
+              <WsTextarea label="Body scripts (before </body>)" placeholder="<script>...</script>" value={ws.custom_body_scripts} onChange={v => updateWs('custom_body_scripts', v)} rows={4} />
+            </WsSection>
+
+            {/* ─── SEO Defaults ─── */}
+            <WsSection title="SEO Defaults">
+              <WsField label="Default page title" placeholder="My Tour Company — Adventures Await" value={ws.seo_title} onChange={v => updateWs('seo_title', v)} />
+              <WsTextarea label="Meta description" placeholder="We organise unforgettable tours..." value={ws.seo_description} onChange={v => updateWs('seo_description', v)} rows={3} />
+              <WsField label="OG image URL" placeholder="https://..." value={ws.og_image_url} onChange={v => updateWs('og_image_url', v)} />
+            </WsSection>
+
+            {/* ─── Legal & Compliance ─── */}
+            <WsSection title="Legal & Compliance">
+              <WsField label="Privacy policy URL" placeholder="https://..." value={ws.privacy_policy_url} onChange={v => updateWs('privacy_policy_url', v)} />
+              <WsField label="Terms & conditions URL" placeholder="https://..." value={ws.terms_url} onChange={v => updateWs('terms_url', v)} />
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <input
+                  type="checkbox"
+                  checked={ws.cookie_consent_enabled}
+                  onChange={e => updateWs('cookie_consent_enabled', e.target.checked)}
+                  style={{ width: 16, height: 16, accentColor: 'var(--crm-accent)' }}
+                />
+                <label style={{ ...labelStyle, marginBottom: 0 }}>Show cookie consent banner</label>
+              </div>
+            </WsSection>
+
+            {/* ─── Business Info ─── */}
+            <WsSection title="Business Information">
+              <WsField label="Registered business name" placeholder="My Tours Pvt. Ltd." value={ws.business_name} onChange={v => updateWs('business_name', v)} />
+              <WsField label="GST / Tax number" placeholder="29XXXXX1234X1Z5" value={ws.gst_number} onChange={v => updateWs('gst_number', v)} />
+              <WsTextarea label="Business address" placeholder="123 MG Road, Bangalore..." value={ws.business_address} onChange={v => updateWs('business_address', v)} rows={3} />
+              <WsField label="Support email" placeholder="support@company.com" value={ws.support_email} onChange={v => updateWs('support_email', v)} />
+              <WsField label="Support phone" placeholder="+91 98765 43210" value={ws.support_phone} onChange={v => updateWs('support_phone', v)} />
+              <WsField label="WhatsApp business number" placeholder="+91 98765 43210" value={ws.whatsapp_number} onChange={v => updateWs('whatsapp_number', v)} />
+            </WsSection>
+
+            {/* ─── Social Media ─── */}
+            <WsSection title="Social Media">
+              <WsField label="Instagram" placeholder="https://instagram.com/yourpage" value={ws.social_instagram} onChange={v => updateWs('social_instagram', v)} />
+              <WsField label="Facebook" placeholder="https://facebook.com/yourpage" value={ws.social_facebook} onChange={v => updateWs('social_facebook', v)} />
+              <WsField label="YouTube" placeholder="https://youtube.com/@yourchannel" value={ws.social_youtube} onChange={v => updateWs('social_youtube', v)} />
+              <WsField label="Twitter / X" placeholder="https://x.com/yourhandle" value={ws.social_twitter} onChange={v => updateWs('social_twitter', v)} />
+              <WsField label="LinkedIn" placeholder="https://linkedin.com/company/yours" value={ws.social_linkedin} onChange={v => updateWs('social_linkedin', v)} />
+            </WsSection>
+
+            {/* ─── Custom Domain ─── */}
+            <WsSection title="Custom Domain">
+              <WsField label="Custom domain" placeholder="tours.yourdomain.com" value={ws.custom_domain} onChange={v => updateWs('custom_domain', v)} />
+              <p style={{ fontSize: 12, color: 'var(--crm-text-3)', margin: 0 }}>
+                Point a CNAME record to your Boarding Pass domain. Contact support for SSL setup.
+              </p>
+            </WsSection>
+
+            <button
+              onClick={saveWebsiteSettings}
+              className="crm-btn primary"
+              disabled={wsSaving}
+              style={{ height: 40, justifyContent: 'center', fontSize: 14, marginTop: 8, marginBottom: 40 }}
+            >
+              {wsSaving ? 'Saving...' : 'Save website settings'}
+            </button>
+          </div>
+        )}
+
         {/* ═══ TEAM TAB ═══ */}
         {activeTab === 'Team' && (
           <div>
@@ -541,7 +770,10 @@ export default function SettingsPage() {
                       <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                         {s.is_active && s.role !== 'owner' && s.id !== user?.id && (
                           <button
-                            onClick={() => deactivateStaffMutation.mutate(s.id)}
+                            onClick={() => {
+                              if (!window.confirm(`Deactivate ${s.name}? They will lose access to the system.`)) return;
+                              deactivateStaffMutation.mutate(s.id);
+                            }}
                             className="crm-btn ghost sm"
                             disabled={deactivateStaffMutation.isPending}
                             style={{ fontSize: 12, color: 'var(--crm-red)' }}
@@ -643,18 +875,109 @@ export default function SettingsPage() {
           <div>
             {/* Current plan card */}
             <div className="crm-card" style={{ padding: 24, marginBottom: 24 }}>
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--crm-text-3)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>
-                  Current plan
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--crm-text-3)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: 4 }}>
+                    Current plan
+                  </div>
+                  <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--crm-text)' }}>
+                    {PLAN_LABELS[billing?.plan || settings?.plan || 'free'] || 'Free'}
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--crm-text-3)', marginTop: 4 }}>
+                    Need more capacity or features? Request an upgrade and our team will get back to you.
+                  </div>
                 </div>
-                <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--crm-text)' }}>
-                  {PLAN_LABELS[billing?.plan || settings?.plan || 'free'] || 'Free'}
-                </div>
-                <div style={{ fontSize: 13, color: 'var(--crm-text-3)', marginTop: 4 }}>
-                  Plan changes are managed manually. Contact support to upgrade.
-                </div>
+                <button
+                  onClick={() => {
+                    setUpgradeOpen(true);
+                    setUpgradeSuccess(false);
+                    setUpgradeTargetPlan('');
+                    setUpgradeMessage('');
+                  }}
+                  className="crm-btn primary"
+                  style={{ height: 36, fontSize: 13 }}
+                >
+                  Request upgrade
+                </button>
               </div>
             </div>
+
+            {/* Request upgrade dialog */}
+            <Dialog open={upgradeOpen} onOpenChange={(open) => { if (!open) setUpgradeOpen(false); }}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>{upgradeSuccess ? 'Request received' : 'Request upgrade'}</DialogTitle>
+                </DialogHeader>
+                {upgradeSuccess ? (
+                  <div style={{ padding: '16px 0', fontSize: 14, color: 'var(--crm-text-2)' }}>
+                    Thanks — we&apos;ve logged your request. Our team will reach out shortly to apply the change.
+                  </div>
+                ) : (
+                  <form
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!upgradeTargetPlan) return;
+                      requestUpgradeMutation.mutate({
+                        target_plan: upgradeTargetPlan,
+                        message: upgradeMessage,
+                      });
+                    }}
+                    style={{ display: 'flex', flexDirection: 'column', gap: 16, padding: '8px 0' }}
+                  >
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <label style={labelStyle}>Target plan</label>
+                      <select
+                        value={upgradeTargetPlan}
+                        onChange={(e) => setUpgradeTargetPlan(e.target.value)}
+                        required
+                        style={selectStyle}
+                      >
+                        <option value="" disabled>Select a plan</option>
+                        {(['starter', 'pro', 'business'] as const)
+                          .filter((p) => p !== (billing?.plan || settings?.plan))
+                          .map((p) => (
+                            <option key={p} value={p}>{PLAN_LABELS[p]}</option>
+                          ))}
+                      </select>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      <label style={labelStyle}>Anything we should know? (optional)</label>
+                      <textarea
+                        value={upgradeMessage}
+                        onChange={(e) => setUpgradeMessage(e.target.value)}
+                        placeholder="e.g. Need more travellers, planning to onboard 5 new ops staff…"
+                        rows={4}
+                        style={{
+                          ...inputStyle,
+                          height: 'auto',
+                          padding: 12,
+                          resize: 'vertical',
+                          fontFamily: 'var(--font-sans)',
+                        }}
+                      />
+                    </div>
+                    <DialogFooter>
+                      <button
+                        type="button"
+                        onClick={() => setUpgradeOpen(false)}
+                        className="crm-btn"
+                        style={{ height: 36, fontSize: 13 }}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="submit"
+                        className="crm-btn primary"
+                        disabled={!upgradeTargetPlan || requestUpgradeMutation.isPending}
+                        style={{ height: 36, fontSize: 13 }}
+                      >
+                        {requestUpgradeMutation.isPending ? 'Sending…' : 'Send request'}
+                      </button>
+                    </DialogFooter>
+                  </form>
+                )}
+              </DialogContent>
+            </Dialog>
 
             {/* Usage bars */}
             {billing && (
@@ -671,6 +994,57 @@ export default function SettingsPage() {
                     limit={billing.limits.storage_bytes}
                     formatValue={formatBytes}
                   />
+                </div>
+              </div>
+            )}
+
+            {/* AI Usage */}
+            {aiUsage && aiUsage.monthly_limit > 0 && (
+              <div style={{ marginTop: 32 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 600, color: 'var(--crm-text)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Sparkles size={18} /> AI Usage
+                </h3>
+
+                {/* Overall usage bar */}
+                <div className="crm-card" style={{ padding: 20, marginBottom: 16 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                    <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--crm-text)' }}>
+                      Monthly credits
+                    </span>
+                    <span style={{ fontSize: 28, fontWeight: 700, color: aiUsage.usage_percent >= 90 ? 'var(--crm-red)' : aiUsage.usage_percent >= 70 ? 'var(--crm-amber, #f59e0b)' : 'var(--crm-accent)' }}>
+                      {Math.round(aiUsage.usage_percent)}%
+                    </span>
+                  </div>
+                  <div style={{ height: 8, borderRadius: 4, background: 'var(--crm-line)', overflow: 'hidden', marginBottom: 8 }}>
+                    <div style={{
+                      width: `${Math.min(aiUsage.usage_percent, 100)}%`,
+                      height: '100%',
+                      borderRadius: 4,
+                      background: aiUsage.usage_percent >= 90 ? 'var(--crm-red)' : aiUsage.usage_percent >= 70 ? 'var(--crm-amber, #f59e0b)' : 'var(--crm-accent)',
+                      transition: 'width 0.3s ease',
+                    }} />
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--crm-text-3)' }}>
+                    {aiUsage.total_credits.toLocaleString()} / {aiUsage.monthly_limit.toLocaleString()} credits used this month
+                  </div>
+                </div>
+
+                {/* Per-category breakdown */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: 12 }}>
+                  {AI_CATEGORIES.map(({ key, label }) => {
+                    const cat = aiUsage.by_category[key];
+                    return (
+                      <div key={key} className="crm-card" style={{ padding: 14 }}>
+                        <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--crm-text-2)', marginBottom: 6 }}>{label}</div>
+                        <div style={{ fontSize: 20, fontWeight: 700, color: 'var(--crm-text)' }}>
+                          {cat ? cat.request_count.toLocaleString() : '0'}
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--crm-text-3)' }}>
+                          {cat ? cat.credits.toLocaleString() : '0'} credits
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -906,6 +1280,82 @@ function UsageBar({
           }}
         />
       </div>
+    </div>
+  );
+}
+
+/* ─── Website Settings Sub-components ─────────── */
+
+function WsSection({ title, subtitle, icon, children }: {
+  title: string;
+  subtitle?: string;
+  icon?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    <div style={{ marginBottom: 32 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: subtitle ? 4 : 16 }}>
+        {icon}
+        <h3 style={{ fontSize: 15, fontWeight: 600, color: 'var(--crm-text)', margin: 0 }}>{title}</h3>
+      </div>
+      {subtitle && (
+        <p style={{ fontSize: 12, color: 'var(--crm-text-3)', margin: '0 0 16px' }}>{subtitle}</p>
+      )}
+      <div className="crm-card" style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function WsField({ label, placeholder, value, onChange }: {
+  label: string;
+  placeholder?: string;
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--crm-text-2)' }}>{label}</label>
+      <input
+        type="text"
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        style={{
+          height: 40, padding: '0 12px',
+          border: '1px solid var(--crm-line)', borderRadius: 'var(--crm-radius-sm)',
+          background: 'var(--crm-bg-elev)', color: 'var(--crm-text)',
+          fontSize: 14, fontFamily: 'var(--font-sans)', outline: 'none', width: '100%',
+        }}
+      />
+    </div>
+  );
+}
+
+function WsTextarea({ label, placeholder, value, onChange, rows = 3 }: {
+  label: string;
+  placeholder?: string;
+  value: string;
+  onChange: (v: string) => void;
+  rows?: number;
+}) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <label style={{ fontSize: 13, fontWeight: 500, color: 'var(--crm-text-2)' }}>{label}</label>
+      <textarea
+        value={value}
+        onChange={e => onChange(e.target.value)}
+        placeholder={placeholder}
+        rows={rows}
+        style={{
+          padding: 12,
+          border: '1px solid var(--crm-line)', borderRadius: 'var(--crm-radius-sm)',
+          background: 'var(--crm-bg-elev)', color: 'var(--crm-text)',
+          fontSize: 14, fontFamily: 'monospace', outline: 'none', width: '100%',
+          resize: 'vertical',
+        }}
+      />
     </div>
   );
 }

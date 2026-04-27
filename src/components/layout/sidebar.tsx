@@ -3,24 +3,28 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/lib/auth';
+import type { PlanFeatures } from '@/lib/auth';
 import {
   LayoutDashboard,
   Compass,
   FileText,
   Users,
-  Wallet,
   MapPin,
   ScrollText,
   UserCog,
-  Search,
   LogOut,
   Target,
   CalendarCheck,
   Globe,
   Settings,
+  Star,
+  Lightbulb,
+  IndianRupee,
+  PenLine,
+  Receipt,
 } from 'lucide-react';
 
-type NavItem = { href: string; label: string; icon: typeof LayoutDashboard; roles: string[] };
+type NavItem = { href: string; label: string; icon: typeof LayoutDashboard; roles: string[]; feature?: keyof PlanFeatures };
 type NavSection = { section?: string; items: NavItem[] };
 
 const navSections: NavSection[] = [
@@ -48,19 +52,27 @@ const navSections: NavSection[] = [
       { href: '/trips', label: 'Trips', icon: Compass, roles: ['owner', 'admin', 'ops', 'sales', 'viewer'] },
       { href: '/departures', label: 'Departures', icon: MapPin, roles: ['owner', 'admin', 'ops', 'sales', 'viewer'] },
       { href: '/bookings', label: 'Bookings', icon: CalendarCheck, roles: ['owner', 'admin', 'ops', 'sales'] },
+      { href: '/finances', label: 'Finances', icon: IndianRupee, roles: ['owner', 'admin', 'sales'] },
+      { href: '/finances/invoices', label: 'Invoices', icon: Receipt, roles: ['owner', 'admin'] },
     ],
   },
   {
     section: 'Operations',
     items: [
       { href: '/documents', label: 'Documents', icon: FileText, roles: ['owner', 'admin', 'ops', 'sales', 'viewer'] },
-      { href: '/finance', label: 'Finance', icon: Wallet, roles: ['owner', 'admin', 'ops', 'sales', 'viewer'] },
+    ],
+  },
+  {
+    section: 'Engagement',
+    items: [
+      { href: '/reviews', label: 'Reviews', icon: Star, roles: ['owner', 'admin'], feature: 'reviews' },
     ],
   },
   {
     section: 'Website',
     items: [
-      { href: '/website', label: 'Website', icon: Globe, roles: ['owner', 'admin'] },
+      { href: '/website', label: 'Website', icon: Globe, roles: ['owner', 'admin'], feature: 'website_builder' },
+      { href: '/blog', label: 'Blog', icon: PenLine, roles: ['owner', 'admin', 'ops', 'sales'] },
     ],
   },
   {
@@ -69,6 +81,12 @@ const navSections: NavSection[] = [
       { href: '/staff', label: 'Staff', icon: UserCog, roles: ['owner', 'admin'] },
       { href: '/audit', label: 'Audit Log', icon: ScrollText, roles: ['owner', 'admin'] },
       { href: '/settings', label: 'Settings', icon: Settings, roles: ['owner', 'admin'] },
+    ],
+  },
+  {
+    section: 'Feedback',
+    items: [
+      { href: '/feature-requests', label: 'Feature Requests', icon: Lightbulb, roles: ['owner', 'admin', 'ops', 'sales', 'viewer'] },
     ],
   },
 ];
@@ -85,27 +103,40 @@ function getInitials(name: string) {
 export function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, features, logout } = useAuth();
+
+  // Defense-in-depth: platform admins should never see the tenant sidebar.
+  // The primary defense is the redirect in <AppShell>; this hides the
+  // sidebar in the tiny window before the redirect fires (and protects us
+  // if a future caller mounts <Sidebar /> outside of AppShell).
+  const isPlatformAdmin = (user as unknown as { is_platform_admin?: boolean } | null)?.is_platform_admin === true;
+  if (isPlatformAdmin) return null;
 
   return (
     <aside className="crm-sidebar">
       <div className="crm-sidebar-hd">
-        <div className="crm-sidebar-logo">{user?.organisation_name ? user.organisation_name.split(' ').map(w => w[0]).join('').slice(0, 2) : 'BP'}</div>
+        {user?.organisation_logo_url ? (
+          <img
+            src={user.organisation_logo_url}
+            alt={user.organisation_name || 'Logo'}
+            style={{ width: 32, height: 32, borderRadius: 8, objectFit: 'cover', flexShrink: 0 }}
+          />
+        ) : (
+          <div className="crm-sidebar-logo">{user?.organisation_name ? user.organisation_name.split(' ').map(w => w[0]).join('').slice(0, 2) : 'T'}</div>
+        )}
         <div className="crm-sidebar-brand">
-          {user?.organisation_name || 'Boarding Pass Tours'}
+          {user?.organisation_name || 'Tourify'}
           <small>CRM</small>
         </div>
       </div>
 
-      <div className="crm-sidebar-search">
-        <Search size={14} />
-        <span>Quick find</span>
-        <kbd>⌘K</kbd>
-      </div>
-
       <nav className="crm-sidebar-nav">
         {navSections.map((section, si) => {
-          const visible = section.items.filter(item => user && item.roles.includes(user.role));
+          const visible = section.items.filter(item => {
+            if (!user || !item.roles.includes(user.role)) return false;
+            if (item.feature && (!features || !features[item.feature])) return false;
+            return true;
+          });
           if (visible.length === 0) return null;
           return (
             <div key={si}>

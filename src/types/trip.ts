@@ -21,6 +21,7 @@ export interface TripMaster {
   hero_image_urls?: string[];
   gallery_urls?: string[];
   status: string;
+  trip_type?: string;
   visa_requirements?: Record<string, unknown>[];
   packing_list_template?: Record<string, unknown>;
   terms_version?: string;

@@ -398,6 +398,7 @@
 /* ─── Typography ──────────────────────────────── */
 .crm-display { font-size: 32px; font-weight: 600; letter-spacing: -0.022em; line-height: 1.1; }
 .crm-title-1 { font-size: 24px; font-weight: 600; letter-spacing: -0.018em; }
+.crm-page-title { font-size: 24px; font-weight: 600; letter-spacing: -0.018em; line-height: 1.2; }
 .crm-title-2 { font-size: 18px; font-weight: 600; letter-spacing: -0.012em; }
 .crm-title-3 { font-size: 15px; font-weight: 600; letter-spacing: -0.008em; }
 .crm-caption { font-size: 12px; color: var(--crm-text-3); letter-spacing: 0; }

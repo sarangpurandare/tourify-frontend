@@ -26,6 +26,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { ArrowLeft, Plus, Star, Trash2 } from 'lucide-react';
+import { EntitySearch } from '@/components/entity-search';
 
 const GROUP_TYPES = ['family', 'friends', 'couple', 'corporate'] as const;
 const COMM_PREFERENCES = ['primary_only', 'all'] as const;
@@ -76,6 +77,9 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
       queryClient.invalidateQueries({ queryKey: ['groups', groupId] });
       setEditing(false);
     },
+    onError: (err: Error) => {
+      alert(err.message || 'Something went wrong');
+    },
   });
 
   const addMemberMutation = useMutation({
@@ -87,6 +91,9 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
       setNewMemberTravellerId('');
       setNewMemberIsCoordinator(false);
     },
+    onError: (err: Error) => {
+      alert(err.message || 'Something went wrong');
+    },
   });
 
   const removeMemberMutation = useMutation({
@@ -94,6 +101,9 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
       api.delete<APIResponse<null>>(`/groups/${groupId}/members/${travellerId}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['groups', groupId] });
+    },
+    onError: (err: Error) => {
+      alert(err.message || 'Something went wrong');
     },
   });
 
@@ -234,21 +244,18 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
                 <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
                     <Label>Traveller</Label>
-                    <Select value={newMemberTravellerId || undefined} onValueChange={(val) => setNewMemberTravellerId(val ?? '')}>
-                      <SelectTrigger className="w-full">
-                        <SelectValue placeholder="Select traveller...">
-                          {(() => { const t = allTravellers.find(tr => tr.id === newMemberTravellerId); return t ? `${t.full_legal_name}${t.city ? ` — ${t.city}` : ''}` : 'Select traveller...'; })()}
-                        </SelectValue>
-                      </SelectTrigger>
-                      <SelectContent style={{ minWidth: 400 }}>
-                        {availableTravellers.map(t => (
-                          <SelectItem key={t.id} value={t.id}>
-                            {t.full_legal_name}{t.city ? ` — ${t.city}` : ''}{t.phone ? ` (${t.phone})` : ''}
-                          </SelectItem>
-                        ))}
-                        {availableTravellers.length === 0 && <div style={{ padding: '8px 12px', fontSize: 12, color: 'var(--crm-text-3)' }}>No travellers available</div>}
-                      </SelectContent>
-                    </Select>
+                    <EntitySearch
+                      options={availableTravellers.map(t => ({
+                        id: t.id,
+                        label: t.full_legal_name,
+                        sublabel: [t.city, t.phone, t.email].filter(Boolean).join(' · '),
+                        initials: t.full_legal_name.split(' ').map(w => w[0]).join('').slice(0, 2),
+                      }))}
+                      value={newMemberTravellerId}
+                      onChange={(id) => setNewMemberTravellerId(id)}
+                      placeholder="Search travellers…"
+                      emptyMessage="No travellers available"
+                    />
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <input
@@ -298,7 +305,10 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
                   <span>
                     <button
                       className="crm-btn ghost sm"
-                      onClick={() => removeMemberMutation.mutate(member.traveller_id)}
+                      onClick={() => {
+                        if (!window.confirm('Remove this member from the group?')) return;
+                        removeMemberMutation.mutate(member.traveller_id);
+                      }}
                       disabled={removeMemberMutation.isPending}
                       style={{ padding: '0 6px', color: 'var(--crm-red)' }}
                     >

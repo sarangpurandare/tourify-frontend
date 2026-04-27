@@ -25,7 +25,7 @@ import {
 import type { Group } from '@/types/group';
 import Link from 'next/link';
 import { FileUpload } from '@/components/ui/file-upload';
-import { AlertTriangle, FileText, Plus, Trash2, Phone, Users, Star, AtSign, Heart, Cake, MapPin } from 'lucide-react';
+import { AlertTriangle, FileText, Plus, Trash2, Phone, Users, Star, AtSign, Heart, Cake, MapPin, Send, Copy, CheckCircle2, ExternalLink, ShieldCheck } from 'lucide-react';
 import { TravellerDocuments } from '@/components/documents/traveller-documents';
 
 /* ─── Avatar color hash ──────────────────────────── */
@@ -105,6 +105,9 @@ export default function TravellerDetailPage({
   const [selectedGroupId, setSelectedGroupId] = useState('');
   const [addAsCoordinator, setAddAsCoordinator] = useState(false);
   const [newGroupForm, setNewGroupForm] = useState({ name: '', type: 'family', comm_preference: 'primary_only' });
+  const [portalInviteOpen, setPortalInviteOpen] = useState(false);
+  const [inviteUrl, setInviteUrl] = useState('');
+  const [inviteCopied, setInviteCopied] = useState(false);
 
   // Form state
   const [editForm, setEditForm] = useState<Partial<Traveller>>({});
@@ -133,6 +136,12 @@ export default function TravellerDetailPage({
     queryFn: () => api.get<APIResponse<CoTraveller[]>>(`/travellers/${id}/co-travellers`),
   });
   const coTravellers = coTravellersData?.data ?? [];
+
+  const { data: portalStatusData } = useQuery({
+    queryKey: ['traveller-portal-status', id],
+    queryFn: () => api.get<APIResponse<{ has_access: boolean; is_active: boolean }>>(`/travellers/${id}/portal-status`),
+  });
+  const portalStatus = portalStatusData?.data ?? null;
 
   const { data: allGroupsData } = useQuery({
     queryKey: ['all-groups-for-add'],
@@ -200,6 +209,22 @@ export default function TravellerDetailPage({
       setAddToGroupOpen(false);
       setSelectedGroupId('');
       setAddAsCoordinator(false);
+    },
+  });
+
+  const portalInviteMutation = useMutation({
+    mutationFn: () => api.post<APIResponse<{ invite_url: string }>>(`/travellers/${id}/portal-invite`),
+    onSuccess: (res) => {
+      setInviteUrl(res.data.invite_url);
+      setPortalInviteOpen(true);
+      queryClient.invalidateQueries({ queryKey: ['traveller-portal-status', id] });
+    },
+  });
+
+  const revokePortalMutation = useMutation({
+    mutationFn: () => api.delete<APIResponse<null>>(`/travellers/${id}/portal-access`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['traveller-portal-status', id] });
     },
   });
 
@@ -372,7 +397,34 @@ export default function TravellerDetailPage({
           </div>
         </div>
 
-        <button className="crm-btn primary" onClick={openEdit}>Edit profile</button>
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          {portalStatus?.has_access ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span className="crm-pill green" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <ShieldCheck size={12} />
+                Portal Active
+              </span>
+              <button
+                className="crm-btn ghost sm"
+                style={{ color: 'var(--crm-red)', fontSize: 11 }}
+                onClick={() => { if (confirm('Revoke portal access for this traveller?')) revokePortalMutation.mutate(); }}
+              >
+                Revoke
+              </button>
+            </div>
+          ) : (
+            <button
+              className="crm-btn"
+              style={{ gap: 6 }}
+              onClick={() => portalInviteMutation.mutate()}
+              disabled={portalInviteMutation.isPending}
+            >
+              <Send size={14} />
+              {portalInviteMutation.isPending ? 'Sending...' : 'Invite to Portal'}
+            </button>
+          )}
+          <button className="crm-btn primary" onClick={openEdit}>Edit profile</button>
+        </div>
       </div>
 
       {/* 2-column grid of cards */}
@@ -1241,6 +1293,67 @@ export default function TravellerDetailPage({
               {createGroupMutation.isPending ? 'Creating...' : 'Create & Add'}
             </button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Portal Invite Dialog ─── */}
+      <Dialog open={portalInviteOpen} onOpenChange={setPortalInviteOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Portal Invite</DialogTitle>
+            <DialogDescription>Share this invite link with the traveller so they can access their portal.</DialogDescription>
+          </DialogHeader>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '8px 0' }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '10px 12px',
+                background: 'var(--crm-bg-subtle)',
+                borderRadius: 'var(--crm-radius-sm)',
+                border: '1px solid var(--crm-line)',
+              }}
+            >
+              <input
+                type="text"
+                value={inviteUrl}
+                readOnly
+                style={{
+                  flex: 1,
+                  background: 'transparent',
+                  border: 'none',
+                  fontSize: 13,
+                  fontFamily: 'var(--font-mono)',
+                  color: 'var(--crm-text)',
+                  outline: 'none',
+                  minWidth: 0,
+                }}
+              />
+              <button
+                className="crm-btn ghost sm"
+                style={{ flexShrink: 0, gap: 4 }}
+                onClick={() => {
+                  navigator.clipboard.writeText(inviteUrl);
+                  setInviteCopied(true);
+                  setTimeout(() => setInviteCopied(false), 2000);
+                }}
+              >
+                {inviteCopied ? <CheckCircle2 size={14} style={{ color: 'var(--crm-green)' }} /> : <Copy size={14} />}
+                {inviteCopied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+            <a
+              href={`https://wa.me/?text=${encodeURIComponent(`Hi ${displayName}, here's your Tourify traveller portal invite: ${inviteUrl}`)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="crm-btn primary"
+              style={{ textDecoration: 'none', justifyContent: 'center', gap: 6, height: 40, fontSize: 14 }}
+            >
+              <ExternalLink size={14} />
+              Share via WhatsApp
+            </a>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

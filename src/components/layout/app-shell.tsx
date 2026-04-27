@@ -10,11 +10,24 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
 
+  // Platform admins should never land on the tenant CRM. Bounce them to
+  // /admin so they get the SaaS-admin shell instead. Note: when an admin is
+  // *impersonating* a tenant user, the JWT-derived user.is_platform_admin
+  // flips to false (the impersonated user is not a platform admin), so this
+  // redirect intentionally does not fire — the impersonation banner remains
+  // visible and the admin stays inside the tenant view.
+  const isPlatformAdmin = (user as unknown as { is_platform_admin?: boolean } | null)?.is_platform_admin === true;
+
   useEffect(() => {
-    if (!loading && !user) {
+    if (loading) return;
+    if (!user) {
       router.push('/login');
+      return;
     }
-  }, [user, loading, router]);
+    if (isPlatformAdmin) {
+      router.replace('/admin');
+    }
+  }, [user, loading, router, isPlatformAdmin]);
 
   if (loading) {
     return (
@@ -48,8 +61,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   if (!user) return null;
 
+  // Belt-and-braces: while the redirect to /admin is in flight, render
+  // nothing rather than flashing the tenant CRM at a platform admin.
+  if (isPlatformAdmin) return null;
+
   return (
-    <div className="crm-app">
+    <div className="crm-app" style={{ height: '100%', minHeight: 0, flex: 1 }}>
       <Sidebar />
       <div className="crm-main">
         <Header />

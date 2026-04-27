@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import type { APIResponse } from '@/types/api';
@@ -263,9 +263,11 @@ export default function TravellersPage() {
   const allGroups = (allGroupsData?.data ?? []).filter((g: { id: string }) => !travellerGroups.some(tg => tg.id === g.id));
 
   // Auto-select first when list loads and nothing is selected
-  if (!selectedId && travellers.length > 0 && !listLoading) {
-    setSelectedId(travellers[0].id);
-  }
+  useEffect(() => {
+    if (!selectedId && travellers.length > 0) {
+      setSelectedId(travellers[0].id);
+    }
+  }, [selectedId, travellers]);
 
   /* ─── Mutations ────────────────────────────────── */
   const createMutation = useMutation({
@@ -276,6 +278,9 @@ export default function TravellersPage() {
       setAddDialogOpen(false);
       setNewTraveller(EMPTY_TRAVELLER_FORM);
       setSelectedId(res.data.id);
+    },
+    onError: (err: Error) => {
+      alert(err.message || 'Something went wrong');
     },
   });
 
@@ -288,6 +293,9 @@ export default function TravellersPage() {
       setEditDialogOpen(false);
       setEditPassportOpen(false);
     },
+    onError: (err: Error) => {
+      alert(err.message || 'Something went wrong');
+    },
   });
 
   const addVisaMutation = useMutation({
@@ -298,6 +306,9 @@ export default function TravellersPage() {
       setAddVisaOpen(false);
       setVisaForm(EMPTY_VISA_FORM);
     },
+    onError: (err: Error) => {
+      alert(err.message || 'Something went wrong');
+    },
   });
 
   const deleteVisaMutation = useMutation({
@@ -305,6 +316,9 @@ export default function TravellersPage() {
       api.delete<APIResponse<null>>(`/travellers/${selectedId}/visas/${visaId}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['traveller-visas', selectedId] });
+    },
+    onError: (err: Error) => {
+      alert(err.message || 'Something went wrong');
     },
   });
 
@@ -316,6 +330,9 @@ export default function TravellersPage() {
       setAddContactOpen(false);
       setContactForm(EMPTY_CONTACT_FORM);
     },
+    onError: (err: Error) => {
+      alert(err.message || 'Something went wrong');
+    },
   });
 
   const deleteContactMutation = useMutation({
@@ -323,6 +340,9 @@ export default function TravellersPage() {
       api.delete<APIResponse<null>>(`/travellers/${selectedId}/emergency-contacts/${contactId}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['traveller', selectedId] });
+    },
+    onError: (err: Error) => {
+      alert(err.message || 'Something went wrong');
     },
   });
 
@@ -334,6 +354,9 @@ export default function TravellersPage() {
       setAddToGroupOpen(false);
       setSelectedGroupId('');
       setAddAsCoordinator(false);
+    },
+    onError: (err: Error) => {
+      alert(err.message || 'Something went wrong');
     },
   });
 
@@ -347,6 +370,9 @@ export default function TravellersPage() {
       queryClient.invalidateQueries({ queryKey: ['traveller-groups', selectedId] });
       setCreateGroupOpen(false);
       setNewGroupForm({ name: '', type: 'family', comm_preference: 'primary_only' });
+    },
+    onError: (err: Error) => {
+      alert(err.message || 'Something went wrong');
     },
   });
 

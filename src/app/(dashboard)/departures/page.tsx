@@ -25,11 +25,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Plus, Clock, Calendar, LayoutGrid, GanttChart } from 'lucide-react';
+import { Plus, Clock, Calendar, LayoutGrid, GanttChart, User, Archive, ChevronDown } from 'lucide-react';
+import { EntitySearch } from '@/components/entity-search';
 
 /* ─── Helpers ─────────────────────────────────── */
 
 const STATUS_FILTERS = ['all', 'open', 'filling_fast', 'sold_out', 'draft', 'closed'] as const;
+const ARCHIVED_STATUSES = ['completed', 'cancelled'];
 
 const STATUS_LABELS: Record<string, string> = {
   all: 'All',
@@ -88,6 +90,17 @@ function formatCurrency(cents: number, currency?: string) {
     return new Intl.NumberFormat('en-IN', { style: 'currency', currency: curr, maximumFractionDigits: 0 }).format(amount);
   } catch {
     return `${curr} ${amount.toLocaleString()}`;
+  }
+}
+
+function quoteStatusPillClass(status?: string) {
+  switch (status) {
+    case 'sent': return 'blue';
+    case 'accepted': return 'green';
+    case 'rejected': return 'red';
+    case 'expired': return '';
+    case 'draft':
+    default: return 'amber';
   }
 }
 
@@ -424,6 +437,7 @@ export default function DeparturesPage() {
   const queryClient = useQueryClient();
 
   const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [typeFilter, setTypeFilter] = useState<string>('all');
   const [view, setView] = useState<'grid' | 'timeline'>('timeline');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newDeparture, setNewDeparture] = useState({
@@ -434,6 +448,9 @@ export default function DeparturesPage() {
     pickup_city: '',
     drop_city: '',
     pricing_override_cents: undefined as number | undefined,
+    client_name: '',
+    client_email: '',
+    client_phone: '',
   });
 
   /* ─── Queries ─────────────────────────────── */
@@ -452,11 +469,17 @@ export default function DeparturesPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (body: typeof newDeparture) =>
-      api.post<APIResponse<Departure>>('/departures', {
+    mutationFn: (body: typeof newDeparture) => {
+      const payload: Record<string, unknown> = {
         ...body,
-        pricing_override_cents: body.pricing_override_cents || undefined,
-      }),
+        pricing_override_cents: body.pricing_override_cents ? body.pricing_override_cents * 100 : undefined,
+      };
+      // Only send client fields if they have values
+      if (!body.client_name) delete payload.client_name;
+      if (!body.client_email) delete payload.client_email;
+      if (!body.client_phone) delete payload.client_phone;
+      return api.post<APIResponse<Departure>>('/departures', payload);
+    },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['departures'] });
       setDialogOpen(false);
@@ -468,6 +491,9 @@ export default function DeparturesPage() {
         pickup_city: '',
         drop_city: '',
         pricing_override_cents: undefined,
+        client_name: '',
+        client_email: '',
+        client_phone: '',
       });
       if (result?.data?.id) {
         router.push(`/departures/${result.data.id}`);
@@ -475,14 +501,42 @@ export default function DeparturesPage() {
     },
   });
 
-  const departures = data?.data ?? [];
+  const rawDepartures = data?.data ?? [];
+  const allDepartures = rawDepartures.filter(d => !ARCHIVED_STATUSES.includes(d.status));
+  const archivedDepartures = rawDepartures.filter(d => ARCHIVED_STATUSES.includes(d.status));
+  const [showArchive, setShowArchive] = useState(false);
   const trips = tripsData?.data ?? [];
+
+  const tripMap = useMemo(() => {
+    const m = new Map<string, TripMaster>();
+    trips.forEach(t => m.set(t.id, t));
+    return m;
+  }, [trips]);
 
   const tripPrices = useMemo(() => {
     const m = new Map<string, number>();
     trips.forEach(t => { if (t.base_price_cents) m.set(t.id, t.base_price_cents); });
     return m;
   }, [trips]);
+
+  // Filter by trip type
+  const departures = useMemo(() => {
+    if (typeFilter === 'all') return allDepartures;
+    return allDepartures.filter(dep => {
+      const depType = dep.trip_type || tripMap.get(dep.trip_master_id)?.trip_type || 'group';
+      return depType === typeFilter;
+    });
+  }, [allDepartures, typeFilter, tripMap]);
+
+  // Helper to determine if a departure is private
+  const isPrivateDeparture = (dep: Departure) => {
+    return (dep.trip_type || tripMap.get(dep.trip_master_id)?.trip_type || 'group') === 'private';
+  };
+
+  // Check if the selected trip in the form is private
+  const selectedTripIsPrivate = newDeparture.trip_master_id
+    ? (tripMap.get(newDeparture.trip_master_id)?.trip_type || 'group') === 'private'
+    : false;
 
   function handleCreate() {
     if (!newDeparture.trip_master_id || !newDeparture.start_date || !newDeparture.end_date) return;
@@ -523,22 +577,66 @@ export default function DeparturesPage() {
               <div className="grid gap-4 py-4">
                 <div className="grid gap-2">
                   <Label>Trip *</Label>
-                  <Select
+                  <EntitySearch
+                    options={trips.map(trip => ({
+                      id: trip.id,
+                      label: trip.name,
+                      sublabel: [
+                        trip.destinations?.join(', '),
+                        trip.duration_days ? `${trip.duration_days}D` : null,
+                      ].filter(Boolean).join(' · '),
+                      imageUrl: trip.hero_image_urls?.[0],
+                      initials: trip.name.split(' ').map(w => w[0]).join('').slice(0, 2),
+                    }))}
                     value={newDeparture.trip_master_id}
-                    onValueChange={(val) => val !== null && setNewDeparture((prev) => ({ ...prev, trip_master_id: val }))}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select a trip" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {trips.map((trip) => (
-                        <SelectItem key={trip.id} value={trip.id}>
-                          {trip.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    onChange={(id) => {
+                      const selectedTrip = trips.find(t => t.id === id);
+                      const isPriv = (selectedTrip?.trip_type || 'group') === 'private';
+                      setNewDeparture(prev => ({
+                        ...prev,
+                        trip_master_id: id,
+                        capacity: isPriv ? 10 : 20,
+                      }));
+                    }}
+                    placeholder="Search trips…"
+                    emptyMessage="No trips found"
+                  />
                 </div>
+                {selectedTripIsPrivate && (
+                  <>
+                    <div className="grid gap-2">
+                      <Label htmlFor="client-name">Client Name</Label>
+                      <Input
+                        id="client-name"
+                        value={newDeparture.client_name}
+                        onChange={(e) => setNewDeparture((prev) => ({ ...prev, client_name: e.target.value }))}
+                        placeholder="e.g. John Doe"
+                      />
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <div className="grid gap-2">
+                        <Label htmlFor="client-email">Client Email</Label>
+                        <Input
+                          id="client-email"
+                          type="email"
+                          value={newDeparture.client_email}
+                          onChange={(e) => setNewDeparture((prev) => ({ ...prev, client_email: e.target.value }))}
+                          placeholder="email@example.com"
+                        />
+                      </div>
+                      <div className="grid gap-2">
+                        <Label htmlFor="client-phone">Client Phone</Label>
+                        <Input
+                          id="client-phone"
+                          type="tel"
+                          value={newDeparture.client_phone}
+                          onChange={(e) => setNewDeparture((prev) => ({ ...prev, client_phone: e.target.value }))}
+                          placeholder="+91 ..."
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div className="grid gap-2">
                     <Label htmlFor="start-date">Start date *</Label>
@@ -559,15 +657,17 @@ export default function DeparturesPage() {
                     />
                   </div>
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="capacity">Capacity</Label>
-                  <Input
-                    id="capacity"
-                    type="number"
-                    value={newDeparture.capacity}
-                    onChange={(e) => setNewDeparture((prev) => ({ ...prev, capacity: parseInt(e.target.value) || 20 }))}
-                  />
-                </div>
+                {!selectedTripIsPrivate && (
+                  <div className="grid gap-2">
+                    <Label htmlFor="capacity">Capacity</Label>
+                    <Input
+                      id="capacity"
+                      type="number"
+                      value={newDeparture.capacity}
+                      onChange={(e) => setNewDeparture((prev) => ({ ...prev, capacity: parseInt(e.target.value) || 20 }))}
+                    />
+                  </div>
+                )}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div className="grid gap-2">
                     <Label htmlFor="pickup-city">Pickup city</Label>
@@ -589,7 +689,7 @@ export default function DeparturesPage() {
                   </div>
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="pricing">Pricing override (paise)</Label>
+                  <Label htmlFor="pricing">Pricing override (₹)</Label>
                   <Input
                     id="pricing"
                     type="number"
@@ -624,16 +724,26 @@ export default function DeparturesPage() {
       </div>
 
       {/* Status filter pills */}
-      <div className="crm-seg" style={{ marginBottom: 20 }}>
-        {STATUS_FILTERS.map((s) => (
-          <button
-            key={s}
-            className={statusFilter === s ? 'on' : ''}
-            onClick={() => setStatusFilter(s)}
-          >
-            {STATUS_LABELS[s]}
-          </button>
-        ))}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+        <div className="crm-seg">
+          {STATUS_FILTERS.map((s) => (
+            <button
+              key={s}
+              className={statusFilter === s ? 'on' : ''}
+              onClick={() => setStatusFilter(s)}
+            >
+              {STATUS_LABELS[s]}
+            </button>
+          ))}
+        </div>
+        <div style={{ display: 'flex', gap: 4 }}>
+          {['all', 'group', 'private'].map(t => (
+            <button key={t} className={`crm-btn sm ${typeFilter === t ? 'primary' : ''}`}
+              onClick={() => setTypeFilter(t)}>
+              {t === 'all' ? 'All' : t === 'group' ? 'Group Tours' : 'Private Trips'}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Content */}
@@ -650,8 +760,9 @@ export default function DeparturesPage() {
         </div>
       ) : (
         /* Grid */
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
           {departures.map((dep, i) => {
+            const isPrivate = isPrivateDeparture(dep);
             const pct = dep.capacity > 0 ? Math.round((dep.confirmed_count / dep.capacity) * 100) : 0;
             const isHero = i === 0;
             const isAmber = pct >= 90;
@@ -671,45 +782,112 @@ export default function DeparturesPage() {
               >
                 {/* Status pill + days out */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                  <span className={`crm-pill ${statusPillClass(dep.status)}`}>
-                    <span className="dot" />
-                    {STATUS_LABELS[dep.status] ?? dep.status}
-                  </span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span className={`crm-pill ${statusPillClass(dep.status)}`}>
+                      <span className="dot" />
+                      {STATUS_LABELS[dep.status] ?? dep.status}
+                    </span>
+                    {isPrivate && dep.quote_status && (
+                      <span className={`crm-pill ${quoteStatusPillClass(dep.quote_status)}`}>
+                        {dep.quote_status}
+                      </span>
+                    )}
+                  </div>
                   <span className="crm-caption" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                     <Clock size={12} />
                     {days > 0 ? `${days}d out` : days === 0 ? 'Today' : `${Math.abs(days)}d ago`}
                   </span>
                 </div>
 
-                {/* Trip name */}
-                <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-0.008em', marginBottom: 2 }}>
-                  {dep.trip_name || 'Untitled Trip'}
-                </div>
+                {isPrivate ? (
+                  <>
+                    {/* Client name (prominent) */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                      <User size={14} style={{ color: 'var(--crm-text-3)' }} />
+                      <span style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-0.008em' }}>
+                        {dep.client_name || 'No client assigned'}
+                      </span>
+                    </div>
 
-                {/* Dates */}
-                <div className="crm-caption" style={{ marginBottom: 14 }}>
-                  {formatDate(dep.start_date)} &ndash; {formatDate(dep.end_date)}
-                </div>
+                    {/* Trip name + dates (smaller) */}
+                    <div className="crm-caption" style={{ marginBottom: 4 }}>
+                      {dep.trip_name || 'Untitled Trip'}
+                    </div>
+                    <div className="crm-caption" style={{ marginBottom: 0 }}>
+                      {formatDate(dep.start_date)} &ndash; {formatDate(dep.end_date)}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* Trip name */}
+                    <div style={{ fontSize: 15, fontWeight: 600, letterSpacing: '-0.008em', marginBottom: 2 }}>
+                      {dep.trip_name || 'Untitled Trip'}
+                    </div>
 
-                {/* Capacity */}
-                <div className="crm-caption" style={{ marginBottom: 4 }}>Capacity</div>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 6 }}>
-                  <span className="crm-tabular" style={{ fontSize: 15, fontWeight: 600 }}>
-                    {dep.confirmed_count}
-                  </span>
-                  <span className="crm-dim" style={{ fontSize: 13 }}>/ {dep.capacity}</span>
-                  {dep.spots_remaining > 0 && (
-                    <span className="crm-dim" style={{ fontSize: 11, marginLeft: 'auto' }}>
-                      {dep.spots_remaining} spots left
-                    </span>
-                  )}
-                </div>
-                <div className={`crm-progress ${isAmber ? 'amber' : 'green'}`}>
-                  <span style={{ width: `${pct}%` }} />
-                </div>
+                    {/* Dates */}
+                    <div className="crm-caption" style={{ marginBottom: 14 }}>
+                      {formatDate(dep.start_date)} &ndash; {formatDate(dep.end_date)}
+                    </div>
+
+                    {/* Capacity */}
+                    <div className="crm-caption" style={{ marginBottom: 4 }}>Capacity</div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 4, marginBottom: 6 }}>
+                      <span className="crm-tabular" style={{ fontSize: 15, fontWeight: 600 }}>
+                        {dep.confirmed_count}
+                      </span>
+                      <span className="crm-dim" style={{ fontSize: 13 }}>/ {dep.capacity}</span>
+                      {dep.spots_remaining > 0 && (
+                        <span className="crm-dim" style={{ fontSize: 11, marginLeft: 'auto' }}>
+                          {dep.spots_remaining} spots left
+                        </span>
+                      )}
+                    </div>
+                    <div className={`crm-progress ${isAmber ? 'amber' : 'green'}`}>
+                      <span style={{ width: `${pct}%` }} />
+                    </div>
+                  </>
+                )}
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Archive section */}
+      {archivedDepartures.length > 0 && (
+        <div style={{ marginTop: 32 }}>
+          <button
+            className="crm-btn sm ghost"
+            onClick={() => setShowArchive(!showArchive)}
+            style={{ display: 'flex', alignItems: 'center', gap: 6, color: 'var(--crm-text-3)' }}
+          >
+            <Archive size={14} />
+            Archive ({archivedDepartures.length})
+            <ChevronDown size={12} style={{ transform: showArchive ? 'rotate(180deg)' : undefined, transition: 'transform 0.2s' }} />
+          </button>
+          {showArchive && (
+            <div style={{ marginTop: 12, padding: 16, background: 'var(--crm-bg-2)', borderRadius: 10, border: '1px dashed var(--crm-hairline)' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+                {archivedDepartures.map((dep) => (
+                  <div
+                    key={dep.id}
+                    className="crm-card crm-card-pad"
+                    style={{ cursor: 'pointer', opacity: 0.7 }}
+                    onClick={() => router.push(`/departures/${dep.id}`)}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span style={{ fontWeight: 600, fontSize: 14 }}>{dep.trip_name ?? 'Unnamed'}</span>
+                      <span className={`crm-pill ${dep.status === 'completed' ? 'green' : 'pink'}`}>{dep.status}</span>
+                    </div>
+                    <span className="crm-caption" style={{ marginTop: 4 }}>
+                      {formatDate(dep.start_date)} – {formatDate(dep.end_date)}
+                      {dep.client_name ? ` · ${dep.client_name}` : ''}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

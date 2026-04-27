@@ -10,6 +10,8 @@ export default function SignupPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [agreeToTerms, setAgreeToTerms] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const { signup } = useAuth();
@@ -20,6 +22,14 @@ export default function SignupPage() {
     setError('');
     if (password.length < 8) {
       setError('Password must be at least 8 characters');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('Passwords do not match');
+      return;
+    }
+    if (!agreeToTerms) {
+      setError('You must agree to the Terms of Service and Privacy Policy');
       return;
     }
     setLoading(true);
@@ -81,10 +91,10 @@ export default function SignupPage() {
               letterSpacing: '0.02em',
             }}
           >
-            BP
+            T
           </div>
           <h1 className="crm-title-1" style={{ marginBottom: 6 }}>Create your account</h1>
-          <p className="crm-caption" style={{ fontSize: 14 }}>Set up your organisation on Boarding Pass</p>
+          <p className="crm-caption" style={{ fontSize: 14 }}>Set up your organisation on Tourify</p>
         </div>
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -148,10 +158,73 @@ export default function SignupPage() {
               style={inputStyle}
             />
           </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <label style={labelStyle}>Confirm password</label>
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Re-enter your password"
+              required
+              minLength={8}
+              style={{
+                ...inputStyle,
+                ...(confirmPassword && confirmPassword !== password
+                  ? { borderColor: 'var(--crm-red)' }
+                  : {}),
+              }}
+            />
+            {confirmPassword && confirmPassword !== password && (
+              <span style={{ fontSize: 12, color: 'var(--crm-red)' }}>
+                Passwords do not match
+              </span>
+            )}
+          </div>
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 8,
+              fontSize: 13,
+              color: 'var(--crm-text-2)',
+              lineHeight: 1.5,
+              cursor: 'pointer',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={agreeToTerms}
+              onChange={(e) => setAgreeToTerms(e.target.checked)}
+              required
+              style={{ marginTop: 3, cursor: 'pointer' }}
+            />
+            <span>
+              I agree to the{' '}
+              {/* TODO: replace with real /terms route when published */}
+              <a
+                href="#"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: 'var(--crm-accent)', textDecoration: 'none', fontWeight: 500 }}
+              >
+                Terms of Service
+              </a>{' '}
+              and{' '}
+              {/* TODO: replace with real /privacy route when published */}
+              <a
+                href="#"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: 'var(--crm-accent)', textDecoration: 'none', fontWeight: 500 }}
+              >
+                Privacy Policy
+              </a>
+            </span>
+          </label>
           <button
             type="submit"
             className="crm-btn primary"
-            disabled={loading}
+            disabled={loading || !agreeToTerms}
             style={{ height: 40, justifyContent: 'center', fontSize: 14, marginTop: 4 }}
           >
             {loading ? 'Creating account...' : 'Create account'}
